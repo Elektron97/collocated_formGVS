@@ -1,0 +1,3 @@
+[submodule "SoRoSim"]
+	path = SoRoSim
+	url = git@github.com:SoRoSim/SoRoSim.git
