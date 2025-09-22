@@ -4,6 +4,8 @@ classdef Collocated_Form < handle
         robot_linkage
         n
         m
+        L
+        Phi_scale
     end
 
     methods
@@ -12,16 +14,16 @@ classdef Collocated_Form < handle
             obj.robot_linkage = robot_linkage;
             obj.n = obj.robot_linkage.ndof;
             obj.m = obj.robot_linkage.nact;
+
+            % Useful Variables
+            obj.L = obj.robot_linkage.VLinks(1).L;
+            obj.Phi_scale =  diag([1/obj.L 1/obj.L 1/obj.L 1 1 1]);
         end
 
         %% Strain Field Function
-        function xi = get_xi(obj, q, s)
-            % Rescale
-            L = obj.robot_linkage.VLinks(1).L;
-            Phi_scale = diag([1/L 1/L 1/L 1 1 1]);
-            
+        function xi = get_xi(obj, q, s)            
             % Compute strain
-            xi = Phi_scale*obj.robot_linkage.CVRods{1}(2).Phi_h(s, obj.robot_linkage.CVRods{1}(2).Phi_dof, obj.robot_linkage.CVRods{1}(2).Phi_odr)*q + obj.robot_linkage.CVRods{1}(2).xi_starfn(s);
+            xi = obj.Phi_scale*obj.robot_linkage.CVRods{1}(2).Phi_h(s, obj.robot_linkage.CVRods{1}(2).Phi_dof, obj.robot_linkage.CVRods{1}(2).Phi_odr)*q + obj.robot_linkage.CVRods{1}(2).xi_starfn(s);
         end
         
         %% Actuation Matrix Function
@@ -41,6 +43,27 @@ classdef Collocated_Form < handle
                 % Tangent
                 t = skew(xi(1:3))*d + xi(4:6) + d_prime;
                 Btau(:, i) = [skew(d)*t; t];
+            end
+        end
+
+        %% Actuation Matrix
+        function A = actuationMatrix(obj, q)
+            % Init
+            A = zeros(obj.n, obj.m);
+        
+            % Gauss-Legendre Integration
+            Xs = obj.robot_linkage.CVRods{1}(2).Xs;
+            Ws = obj.robot_linkage.CVRods{1}(2).Ws;
+        
+            for i = 1:length(Xs)
+                % Functional Basis
+                Bq = obj.Phi_scale*obj.robot_linkage.CVRods{1}(2).Phi_h(Xs(i), obj.robot_linkage.CVRods{1}(2).Phi_dof, obj.robot_linkage.CVRods{1}(2).Phi_odr);
+
+                % Actuation Matrix
+                [Btau, ~] = distributedActuationMatrix(obj, q, Xs(i));
+                
+                % Actuator Path
+                A = A + Ws(i)*(Bq')*Btau;
             end
         end
         
@@ -66,23 +89,30 @@ classdef Collocated_Form < handle
         end
 
         %% Compute Transformation
-        function theta = transform(obj, q)
+        function [theta, theta_dot] = transform(obj, q, qdot)
             % This function transform the coordinate q in the
             % collocated theta.
 
             % For now only underactuated system
-            assert(obj.m < obj.n, "Class supports only Underactuated system for now.");
+            assert(obj.m <= obj.n, "Class supports only Underactuated system for now.");
+            
+            % Compute Actuation Matrix
+            A = obj.actuationMatrix(q);
+            assert(rank(A) == obj.m, "Actuation Matrix is not full rank.")
 
             % Passive Output
             y = obj.actuatorLengths(q);
+
+            % To apply Pustina's Theorem, we need to reorder the rows of A
+            % in such a way, the first m rows are full rank.
+            % To perform this, we use QR algorithm.
+            [~, ~, P] = qr(A');
+            qp = (P')*q;
+            qdotp = (P')*qdot;
             
             % Change of Coordinates for Underactuated system
-            theta = [y; zeros(obj.n - obj.m, 1)] + blkdiag(zeros(obj.m, obj.m), eye(obj.n - obj.m))*q;
-        end
-
-        %% Compute Transformation Dot
-        function theta_dot = transformDot(obj, q, q_dot)
-            theta_dot = (obj.robot_linkage.ActuationMatrix(q)')*q_dot;
+            theta = [y; zeros(obj.n - obj.m, 1)] + blkdiag(zeros(obj.m, obj.m), eye(obj.n - obj.m))*qp;
+            theta_dot = [(A')*qdot; [zeros(obj.n - obj.m, obj.m), eye(obj.n - obj.m)]*qdotp];
         end
     end
 end

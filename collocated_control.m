@@ -13,9 +13,6 @@ startup
 [current_path, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
 cd(current_path)
 
-% Remove useless variables
-% clear all
-
 %% Load Data
 robot_name = "conical_hsupport";
 
@@ -30,5 +27,6 @@ load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 cf = Collocated_Form(T1);
 
 % Test change of coordinates
-q0 = zeros(T1.ndof, 1);
-theta = cf.transform(q0);
+q0 = randn(T1.ndof, 1);
+qdot0 = randn(T1.ndof, 1);
+[theta, theta_dot] = cf.transform(q0, qdot0);
