@@ -6,6 +6,7 @@ classdef Collocated_Form < handle
         m
         L
         Phi_scale
+        q_sing
     end
 
     methods
@@ -18,6 +19,9 @@ classdef Collocated_Form < handle
             % Useful Variables
             obj.L = obj.robot_linkage.VLinks(1).L;
             obj.Phi_scale =  diag([1/obj.L 1/obj.L 1/obj.L 1 1 1]);
+
+            % Test on Actuation Matrix
+            obj.testActuation();
         end
 
         %% Strain Field Function
@@ -26,7 +30,7 @@ classdef Collocated_Form < handle
             xi = obj.Phi_scale*obj.robot_linkage.CVRods{1}(2).Phi_h(s, obj.robot_linkage.CVRods{1}(2).Phi_dof, obj.robot_linkage.CVRods{1}(2).Phi_odr)*q + obj.robot_linkage.CVRods{1}(2).xi_starfn(s);
         end
         
-        %% Actuation Matrix Function
+        %% Distributed Actuation Matrix Function
         function [Btau, xi] = distributedActuationMatrix(obj, q, s)
             % Init
             Btau = zeros(6, obj.m);
@@ -67,6 +71,33 @@ classdef Collocated_Form < handle
             end
         end
         
+        %% Test Actuation Matrix
+        function testActuation(obj, options)
+            arguments
+                obj
+                options.N = 1000;
+            end
+            % Candidates
+            q_test = randn(obj.n, options.N);
+            obj.q_sing = [];
+
+            % Test the candidates
+            for i = 1:options.N
+                % Store if A is singular
+                if(rank(obj.actuationMatrix(q_test(:, i))) ~= obj.m)
+                    obj.q_sing = [obj.q_sing, q_test(:, i)];
+                end
+            end
+
+            % Warning
+            if(~isempty(obj.q_sing))
+                warning("The Actuation Matrix is singular for the following values:");
+                disp(obj.q_sing);
+            else
+                disp("No singularities found in the Actuation Matrix.")
+            end
+        end
+
         %% Actuators Length
         function La = actuatorLengths(obj, q)
             % Init
@@ -98,7 +129,7 @@ classdef Collocated_Form < handle
             
             % Compute Actuation Matrix
             A = obj.actuationMatrix(q);
-            assert(rank(A) == obj.m, "Actuation Matrix is not full rank.")
+            assert(rank(A) == obj.m, "Actuation Matrix is not full rank.");
 
             % Passive Output
             y = obj.actuatorLengths(q);
@@ -113,6 +144,31 @@ classdef Collocated_Form < handle
             % Change of Coordinates for Underactuated system
             theta = [y; zeros(obj.n - obj.m, 1)] + blkdiag(zeros(obj.m, obj.m), eye(obj.n - obj.m))*qp;
             theta_dot = [(A')*qdot; [zeros(obj.n - obj.m, obj.m), eye(obj.n - obj.m)]*qdotp];
+        end
+
+        function z = groupTransform(obj, x)
+            [theta, theta_dot] = obj.transform(x(1:obj.n), x(obj.n + 1:end));
+            z = [theta; theta_dot];
+        end
+
+        function [q, qdot] = inverseTransformation(obj, theta, theta_dot, options)
+            arguments
+                obj
+                theta
+                theta_dot
+                options.initial_guess = zeros(2*obj.n, 1);
+                options.iter = 'iter';
+            end
+            % Numerical Solution
+            tf_handle = @(x) [theta; theta_dot] - obj.groupTransform(x);
+
+            % Set fsolve
+            fsolve_opt = optimoptions('fsolve', 'Display', options.iter);
+            x = fsolve(tf_handle, options.initial_guess, fsolve_opt);
+
+            % Get Solution
+            q = x(1:obj.n);
+            qdot = x(obj.n + 1:end);
         end
     end
 end
