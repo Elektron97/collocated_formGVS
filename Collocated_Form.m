@@ -215,8 +215,9 @@ classdef Collocated_Form < handle
 
             % Inertia
             M_theta = (invJh')*dynamic_matrices.M*invJh;
-            G_theta = invJh*dynamic_matrices.G;
-            K_theta = (invJh')*dynamic_matrices.K*invJh;
+            G_theta = (invJh')*dynamic_matrices.G;
+            % Elasticity vector
+            K_theta = (invJh')*dynamic_matrices.K*q;
             D_theta = (invJh')*dynamic_matrices.D*invJh;
         end
     end
