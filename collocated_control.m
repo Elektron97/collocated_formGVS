@@ -27,7 +27,7 @@ load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 cf = Collocated_Form(T1);
 
 % Test change of coordinates
-q0 = zeros(T1.ndof, 1);
-qdot0 = zeros(T1.ndof, 1);
+q0 = randn(T1.ndof, 1);
+qdot0 = randn(T1.ndof, 1);
 [theta, theta_dot] = cf.transform(q0, qdot0);
-[q, qdot] = cf.inverseTransformation(theta, theta_dot);
+cf.transformSystem(q0, qdot0)

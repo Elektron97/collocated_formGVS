@@ -46,12 +46,13 @@ classdef Collocated_Form < handle
         
                 % Tangent
                 t = skew(xi(1:3))*d + xi(4:6) + d_prime;
+                t = t / norm(t);
                 Btau(:, i) = [skew(d)*t; t];
             end
         end
 
         %% Actuation Matrix
-        function A = actuationMatrix(obj, q)
+        function [A, P, Aa, Au] = actuationMatrix(obj, q)
             % Init
             A = zeros(obj.n, obj.m);
         
@@ -69,6 +70,19 @@ classdef Collocated_Form < handle
                 % Actuator Path
                 A = A + Ws(i)*(Bq')*Btau;
             end
+
+            % Compute QR Factorization
+            if nargout > 1
+                % A'P = QR
+                [~, ~, P] = qr(A');
+
+                % Compute Aa and Au
+                if nargout > 2
+                    Ap = (P')*A;
+                    Aa = Ap(1:obj.m, :);
+                    Au = Ap(obj.m + 1:end, :);
+                end
+            end
         end
         
         %% Test Actuation Matrix
@@ -78,11 +92,11 @@ classdef Collocated_Form < handle
                 options.N = 1000;
             end
             % Candidates
-            q_test = randn(obj.n, options.N);
+            q_test = [zeros(obj.n, 1), randn(obj.n, options.N)];
             obj.q_sing = [];
 
             % Test the candidates
-            for i = 1:options.N
+            for i = 1:(options.N + 1)
                 % Store if A is singular
                 if(rank(obj.actuationMatrix(q_test(:, i))) ~= obj.m)
                     obj.q_sing = [obj.q_sing, q_test(:, i)];
@@ -119,7 +133,6 @@ classdef Collocated_Form < handle
             end
         end
 
-        %% Compute Transformation
         function [theta, theta_dot] = transform(obj, q, qdot)
             % This function transform the coordinate q in the
             % collocated theta.
@@ -127,23 +140,29 @@ classdef Collocated_Form < handle
             % For now only underactuated system
             assert(obj.m <= obj.n, "Class supports only Underactuated system for now.");
             
+            % To apply Pustina's Theorem, we need to reorder the rows of A
+            % in such a way, the first m rows are full rank.
+            % To perform this automatically, we use QR algorithm.
+
             % Compute Actuation Matrix
-            A = obj.actuationMatrix(q);
+            [A, P] = obj.actuationMatrix(q);
             assert(rank(A) == obj.m, "Actuation Matrix is not full rank.");
 
             % Passive Output
             y = obj.actuatorLengths(q);
-
-            % To apply Pustina's Theorem, we need to reorder the rows of A
-            % in such a way, the first m rows are full rank.
-            % To perform this, we use QR algorithm.
-            [~, ~, P] = qr(A');
-            qp = (P')*q;
-            qdotp = (P')*qdot;
             
             % Change of Coordinates for Underactuated system
-            theta = [y; zeros(obj.n - obj.m, 1)] + blkdiag(zeros(obj.m, obj.m), eye(obj.n - obj.m))*qp;
-            theta_dot = [(A')*qdot; [zeros(obj.n - obj.m, obj.m), eye(obj.n - obj.m)]*qdotp];
+            qp = (P')*q;            % qa = qp(1:obj.m) | qu = q(obj.m + 1:end)
+            qdotp = (P')*qdot;      % qdota = qdotp(1:obj.m) | qdotu = qdot(obj.m + 1:end)
+
+            % Formal Expression
+            % theta = [y; zeros(obj.n - obj.m, 1)] + blkdiag(zeros(obj.m, obj.m), eye(obj.n - obj.m))*qp;
+            % theta_dot = [(A')*qdot; [zeros(obj.n - obj.m, obj.m), eye(obj.n - obj.m)]*qdotp];
+
+            % More efficient (and natural) expressions
+            % Notice that should be (Ap')*qdotp, but = (A'*P)*P'*qdot = A'*qdot
+            theta = [y; qp((obj.m + 1):end)];
+            theta_dot = [(A')*qdot; qdotp((obj.m + 1):end)];
         end
 
         function z = groupTransform(obj, x)
@@ -169,6 +188,36 @@ classdef Collocated_Form < handle
             % Get Solution
             q = x(1:obj.n);
             qdot = x(obj.n + 1:end);
+        end
+    
+        function [M_theta, G_theta, K_theta, D_theta] = transformSystem(obj, q, qdot)
+            % This function transform the system in the collocated form.
+            arguments
+                obj
+                q
+                qdot
+            end
+
+            %% Compute Actuation Matrix
+            [~, ~, Aa, Au] = obj.actuationMatrix(q);
+
+            % Precomputing useful variables
+            AaT = Aa';
+            AuT = Au';
+            invAaT = pinv(AaT);
+
+            %% Compute Jacobian of the Transf. of Coordinates
+            Jh = [AaT, AuT; zeros(obj.n - obj.m, obj.m), eye(obj.n - obj.m)];
+            invJh = [invAaT, -invAaT*AuT; zeros(obj.n - obj.m, obj.m), eye(obj.n - obj.m)];
+
+            %% Applying transformation to the Matrices (for now only G and K)
+            [~, dynamic_matrices] = obj.robot_linkage.my_dynamicsSolver(0, [q; qdot], zeros(obj.m, 1));
+
+            % Inertia
+            M_theta = (invJh')*dynamic_matrices.M*invJh;
+            G_theta = invJh*dynamic_matrices.G;
+            K_theta = (invJh')*dynamic_matrices.K*invJh;
+            D_theta = (invJh')*dynamic_matrices.D*invJh;
         end
     end
 end
