@@ -14,7 +14,7 @@ startup
 cd(current_path)
 
 %% Load Data
-robot_name = "conical_hsupport";
+robot_name = "rsip";
 
 % mat ext
 file_name = "robot_linkage";
@@ -26,8 +26,64 @@ load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 %% Collocated Form
 cf = Collocated_Form(T1);
 
-% Test change of coordinates
-q0 = randn(T1.ndof, 1);
-qdot0 = randn(T1.ndof, 1);
-[theta, theta_dot] = cf.transform(q0, qdot0);
-cf.transformSystem(q0, qdot0)
+% % Test change of coordinates
+% q0 = randn(T1.ndof, 1);
+% qdot0 = randn(T1.ndof, 1);
+% [theta, theta_dot] = cf.transform(q0, qdot0);
+% [M_theta, G_theta, K_theta, D_theta] = cf.transformSystem(q0, qdot0);
+
+%% Equilibria of the System
+% Load EquilibriaGVS repo
+addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS"))
+addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS", "functions"))
+
+% Call equilibriaGVS function
+u = zeros(T1.nact, 1);
+q = equilibriaGVS(T1, "input", u);
+
+% WrapToPi correction for the revolut joint
+if T1.CVRods{1}(1).dof >= 1
+    q(1, :) = wrapToPi(q(1, :));
+end
+
+% Filter Equilibria
+q = filterEquilibria(q);
+
+%% Lyapunov Function
+function Vc = collocated_Lyapunov(theta_a, theta_ad, Ga_eq, Ka_eq, K_pa)
+    arguments
+        theta_a
+        theta_ad
+        Ga_eq
+        Ka_eq
+        K_pa = eye(length(theta_a));
+    end
+
+    % Compute Collocated Lyapunov Term
+    theta_tilde_a = theta_ad - theta_a;
+
+    % Minimum Eigenvalue from the matrix
+    [lambda, ~] = eig(K_pa);
+    lambda_min = min(lambda);
+
+    Vc = 0.5*(theta_tilde_a')*K_pa*theta_tilde_a + (theta_tilde_a')*(Ga_eq + Ka_eq) + 0.5*(norm(Ga_eq + Ka_eq)^2)/lambda_min;
+end
+
+% function H = energy(theta, theta_dot)
+%     arguments
+%         theta_a
+%         theta_ad
+%         Ga_eq
+%         Ka_eq
+%         K_pa = eye(length(theta_a));
+%     end
+% 
+%     % Compute Collocated Lyapunov Term
+%     theta_tilde_a = theta_ad - theta_a;
+% 
+%     % Minimum Eigenvalue from the matrix
+%     [lambda, ~] = eig(K_pa);
+%     lambda_min = min(lambda);
+% 
+%     Vc = 0.5*(theta_tilde_a')*K_pa*theta_tilde_a + (theta_tilde_a')*(Ga_eq + Ka_eq) + 0.5*(norm(Ga_eq + Ka_eq)^2)/lambda_min;
+% end

@@ -4,6 +4,9 @@ classdef Collocated_Form < handle
         robot_linkage
         n
         m
+        joint_dof
+        strain_dof
+        n_sact
         L
         Phi_scale
         q_sing
@@ -16,6 +19,13 @@ classdef Collocated_Form < handle
             obj.n = obj.robot_linkage.ndof;
             obj.m = obj.robot_linkage.nact;
 
+            % Joint and Soft DoFs
+            obj.joint_dof = obj.robot_linkage.CVRods{1}(1).dof;
+            obj.strain_dof = obj.robot_linkage.CVRods{1}(2).dof;
+
+            % Soft Actuators
+            obj.n_sact = obj.robot_linkage.n_sact;
+
             % Useful Variables
             obj.L = obj.robot_linkage.VLinks(1).L;
             obj.Phi_scale =  diag([1/obj.L 1/obj.L 1/obj.L 1 1 1]);
@@ -25,21 +35,29 @@ classdef Collocated_Form < handle
         end
 
         %% Strain Field Function
-        function xi = get_xi(obj, q, s)            
+        function xi = get_xi(obj, q, s)
+            % Assert for current implementation
+            assert(isscalar(obj.robot_linkage.CVRods), "For now only single link linkage is supproted. Sorry, I'm lazy.")
+
+            % Extract Joint and Strain q
+            rod = obj.robot_linkage.CVRods{1};
+            obj.joint_dof = rod(1).dof;
+            obj.strain_dof = rod(2).dof;
+
             % Compute strain
-            xi = obj.Phi_scale*obj.robot_linkage.CVRods{1}(2).Phi_h(s, obj.robot_linkage.CVRods{1}(2).Phi_dof, obj.robot_linkage.CVRods{1}(2).Phi_odr)*q + obj.robot_linkage.CVRods{1}(2).xi_starfn(s);
+            xi = obj.Phi_scale*rod(2).Phi_h(s, rod(2).Phi_dof, rod(2).Phi_odr)*q(obj.joint_dof + 1: obj.joint_dof + obj.strain_dof) + obj.robot_linkage.CVRods{1}(2).xi_starfn(s);
         end
         
         %% Distributed Actuation Matrix Function
         function [Btau, xi] = distributedActuationMatrix(obj, q, s)
             % Init
-            Btau = zeros(6, obj.m);
+            Btau = zeros(6, obj.robot_linkage.n_sact);
         
             % Get xi
             xi = obj.get_xi(q, s);
             
             % Build Columns
-            for i = 1:obj.m
+            for i = 1:obj.robot_linkage.n_sact
                 % Cable Routings
                 d = obj.robot_linkage.CableFunction.dc_fn{i}(s);
                 d_prime = obj.robot_linkage.CableFunction.dcp_fn{i}(s);
@@ -55,20 +73,27 @@ classdef Collocated_Form < handle
         function [A, P, Aa, Au] = actuationMatrix(obj, q)
             % Init
             A = zeros(obj.n, obj.m);
-        
-            % Gauss-Legendre Integration
-            Xs = obj.robot_linkage.CVRods{1}(2).Xs;
-            Ws = obj.robot_linkage.CVRods{1}(2).Ws;
-        
-            for i = 1:length(Xs)
-                % Functional Basis
-                Bq = obj.Phi_scale*obj.robot_linkage.CVRods{1}(2).Phi_h(Xs(i), obj.robot_linkage.CVRods{1}(2).Phi_dof, obj.robot_linkage.CVRods{1}(2).Phi_odr);
 
-                % Actuation Matrix
-                [Btau, ~] = distributedActuationMatrix(obj, q, Xs(i));
-                
-                % Actuator Path
-                A = A + Ws(i)*(Bq')*Btau;
+            % Joint Actuation Matrix
+            if obj.joint_dof > 0
+                A(:, 1) = obj.robot_linkage.Bj1;
+            end
+        
+            if obj.n_sact > 0
+                % Gauss-Legendre Integration
+                Xs = obj.robot_linkage.CVRods{1}(2).Xs;
+                Ws = obj.robot_linkage.CVRods{1}(2).Ws;
+            
+                for i = 1:length(Xs)
+                    % Functional Basis
+                    Bq = obj.Phi_scale*obj.robot_linkage.CVRods{1}(2).Phi_h(Xs(i), obj.robot_linkage.CVRods{1}(2).Phi_dof, obj.robot_linkage.CVRods{1}(2).Phi_odr);
+    
+                    % Actuation Matrix
+                    [Btau, ~] = distributedActuationMatrix(obj, q, Xs(i));
+                    
+                    % Actuator Path
+                    A(obj.joint_dof + 1:obj.joint_dof + obj.strain_dof, :) = A + Ws(i)*(Bq')*Btau;
+                end
             end
 
             % Compute QR Factorization
@@ -115,20 +140,23 @@ classdef Collocated_Form < handle
         %% Actuators Length
         function La = actuatorLengths(obj, q)
             % Init
-            La = zeros(obj.m, 1);
+            La = zeros(obj.n_sact, 1);
         
-            % Gauss-Legendre Integration
-            Xs = obj.robot_linkage.CVRods{1}(2).Xs;
-            Ws = obj.robot_linkage.CVRods{1}(2).Ws;
-        
-            for i = 1:length(Xs)
-                % Actuation Matrix
-                [Btau, xi] = distributedActuationMatrix(obj, q, Xs(i));
-                
-                % Actuator Path
-                for j = 1:obj.m
-                    d_prime = obj.robot_linkage.CableFunction.dcp_fn{j}(Xs(i));
-                    La(j) = La(j) + Ws(i)*(Btau(:, j)')*(xi + [zeros(3, 1); d_prime]);
+            % Compute only if there exists soft actuators
+            if obj.n_sact > 0
+                % Gauss-Legendre Integration
+                Xs = obj.robot_linkage.CVRods{1}(2).Xs;
+                Ws = obj.robot_linkage.CVRods{1}(2).Ws;
+            
+                for i = 1:length(Xs)
+                    % Actuation Matrix
+                    [Btau, xi] = distributedActuationMatrix(obj, q, Xs(i));
+                    
+                    % Actuator Path
+                    for j = 1:obj.m
+                        d_prime = obj.robot_linkage.CableFunction.dcp_fn{j}(Xs(i));
+                        La(j) = La(j) + Ws(i)*(Btau(:, j)')*(xi + [zeros(3, 1); d_prime]);
+                    end
                 end
             end
         end
@@ -149,8 +177,17 @@ classdef Collocated_Form < handle
             assert(rank(A) == obj.m, "Actuation Matrix is not full rank.");
 
             % Passive Output
-            y = obj.actuatorLengths(q);
-            
+            y = zeros(obj.m, 1);
+
+            % Insert 1D Joint
+            if obj.joint_dof > 0
+                y(1) = q(1:obj.joint_dof);
+            end
+
+            if obj.n_sact > 0
+                y(obj.joint_dof + 1: obj.joint_dof + obj.n_sact) = obj.actuatorLengths(q);
+            end
+
             % Change of Coordinates for Underactuated system
             qp = (P')*q;            % qa = qp(1:obj.m) | qu = q(obj.m + 1:end)
             qdotp = (P')*qdot;      % qdota = qdotp(1:obj.m) | qdotu = qdot(obj.m + 1:end)
@@ -188,6 +225,17 @@ classdef Collocated_Form < handle
             % Get Solution
             q = x(1:obj.n);
             qdot = x(obj.n + 1:end);
+        end
+
+
+        function [M, G, K, D] = dynamicMarices(obj, q, qdot)
+            [~, dynamic_matrices] = obj.robot_linkage.my_dynamicsSolver(0, [q; qdot], zeros(obj.m, 1));
+            % Inertia
+            M = dynamic_matrices.M;
+            G = - dynamic_matrices.G;
+            % Elasticity vector
+            K = dynamic_matrices.K*q;
+            D = dynamic_matrices.D;
         end
     
         function [M_theta, G_theta, K_theta, D_theta] = transformSystem(obj, q, qdot)
