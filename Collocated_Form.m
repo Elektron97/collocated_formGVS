@@ -4,12 +4,14 @@ classdef Collocated_Form < handle
         robot_linkage
         n
         m
+        p
         joint_dof
         strain_dof
         n_sact
         L
         Phi_scale
         q_sing
+        sigma_min
     end
 
     methods
@@ -18,6 +20,7 @@ classdef Collocated_Form < handle
             obj.robot_linkage = robot_linkage;
             obj.n = obj.robot_linkage.ndof;
             obj.m = obj.robot_linkage.nact;
+            obj.p = obj.n - obj.m;
 
             % Joint and Soft DoFs
             obj.joint_dof = obj.robot_linkage.CVRods{1}(1).dof;
@@ -119,13 +122,19 @@ classdef Collocated_Form < handle
             % Candidates
             q_test = [zeros(obj.n, 1), randn(obj.n, options.N)];
             obj.q_sing = [];
+            obj.sigma_min = zeros(1, options.N + 1);
 
             % Test the candidates
             for i = 1:(options.N + 1)
+                A = obj.actuationMatrix(q_test(:, i));
                 % Store if A is singular
-                if(rank(obj.actuationMatrix(q_test(:, i))) ~= obj.m)
+                if(rank(A) ~= obj.m)
                     obj.q_sing = [obj.q_sing, q_test(:, i)];
                 end
+
+                % Minimum Singular Values
+                [~, S, ~] = svd(A, "vector");
+                obj.sigma_min(i) = min(S);
             end
 
             % Warning
@@ -134,6 +143,10 @@ classdef Collocated_Form < handle
                 disp(obj.q_sing);
             else
                 disp("No singularities found in the Actuation Matrix.")
+
+                % Show the Minimum Singular Value found
+                disp("Minimum Singular Value of the Actuation Matrix:")
+                disp(min(obj.sigma_min))
             end
         end
 
@@ -173,7 +186,11 @@ classdef Collocated_Form < handle
             % To perform this automatically, we use QR algorithm.
 
             % Compute Actuation Matrix
-            [A, P] = obj.actuationMatrix(q);
+            % [A, P] = obj.actuationMatrix(q);
+            
+            % No QR
+            A = obj.actuationMatrix(q);
+            P = eye(obj.n);
             assert(rank(A) == obj.m, "Actuation Matrix is not full rank.");
 
             % Passive Output
@@ -227,12 +244,11 @@ classdef Collocated_Form < handle
             qdot = x(obj.n + 1:end);
         end
 
-
-        function [M, G, K, D] = dynamicMarices(obj, q, qdot)
+        function [M, G, K, D] = dynamicMatrices(obj, q, qdot)
             [~, dynamic_matrices] = obj.robot_linkage.my_dynamicsSolver(0, [q; qdot], zeros(obj.m, 1));
             % Inertia
             M = dynamic_matrices.M;
-            G = - dynamic_matrices.G;
+            G = dynamic_matrices.G;
             % Elasticity vector
             K = dynamic_matrices.K*q;
             D = dynamic_matrices.D;
@@ -247,7 +263,12 @@ classdef Collocated_Form < handle
             end
 
             %% Compute Actuation Matrix
-            [~, ~, Aa, Au] = obj.actuationMatrix(q);
+            % [~, ~, Aa, Au] = obj.actuationMatrix(q);
+            A = obj.actuationMatrix(q);
+
+            % No QR
+            Aa = A(1:obj.m, :);
+            Au = A(obj.m + 1:end, :);
 
             % Precomputing useful variables
             AaT = Aa';
@@ -255,8 +276,8 @@ classdef Collocated_Form < handle
             invAaT = pinv(AaT);
 
             %% Compute Jacobian of the Transf. of Coordinates
-            Jh = [AaT, AuT; zeros(obj.n - obj.m, obj.m), eye(obj.n - obj.m)];
-            invJh = [invAaT, -invAaT*AuT; zeros(obj.n - obj.m, obj.m), eye(obj.n - obj.m)];
+            % Jh = [AaT, AuT; zeros(obj.n - obj.m, obj.m), eye(obj.n - obj.m)];
+            invJh = [invAaT, -invAaT*AuT; zeros(obj.p, obj.m), eye(obj.p)];
 
             %% Applying transformation to the Matrices (for now only G and K)
             [~, dynamic_matrices] = obj.robot_linkage.my_dynamicsSolver(0, [q; qdot], zeros(obj.m, 1));

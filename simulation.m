@@ -30,8 +30,8 @@ T1.PlotParameters.Light = false;
 T1.PlotParameters.ClosePrevious = false;
 
 % Axes Limits
-T1.PlotParameters.XLim = [-0.6, 0.6];
-T1.PlotParameters.YLim = [-0.6, 0.6];
+T1.PlotParameters.XLim = [-T1.VLinks.L, T1.VLinks.L];
+T1.PlotParameters.YLim = [-T1.VLinks.L, T1.VLinks.L];
 
 % Colors
 blue_sofft = "#086788";
@@ -43,17 +43,19 @@ T1.VLinks.color = hex2rgb(blue_sofft);
 T1.PlotParameters.CameraPosition = [-0.0316   -0.0001   -6.9004];
 
 % Damping Joint
-T1.D(1, 1) = 1e-2;
+if T1.CVRods{1}(1).dof == 1
+    T1.D(1, 1) = 1e-2;
+end
 
 % Update Linkage
 T1 = T1.Update();
 
 %% Simulation Setup
 fs = 1e+3;
-tf = 50;
+tf = 5;
 t0 = 0;
 t = 0:(1/fs):tf;
-N_sim = length(t);
+N_time = length(t);
 n = T1.ndof;
 q0 = randn(n, 1);
 qdot0 = zeros(n, 1);
@@ -62,58 +64,168 @@ x0 = [q0; qdot0];
 % Collocation Object
 cf = Collocated_Form(T1);
 
-% Desired Configuration
-q_des = zeros(T1.ndof, 1);
+%% Feasible Target
+% Load EquilibriaGVS repo
+addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS"))
+addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS", "functions"))
 
+% Call equilibriaGVS function
+u = 1.0e+1*ones(T1.nact, 1);
+equilibria = equilibriaGVS(T1, "input", u);
+% Filter Equilibria
+equilibria = filterEquilibria(equilibria);
+q_des = equilibria(:, 1);
+q_dot_des = zeros(cf.n, 1);
+
+%% Set Control Law
 % Method
-control_law = "noncollocated_PD_FF";
+control_law = "autonomous";
+% control_law = "noncollocated_PD_FF";
 % control_law = "collocated_PD_FF";
 % control_law = "classic_PD_FF";
 
 %% Simulate
 ODEFUN = @(t, xk) closed_loop(cf, t, xk, "q_des", q_des, "control_law", control_law, ...
-                                    "Kpa", 20*eye(cf.m),         "Kda", 10*eye(cf.m), ...
-                                    "Kpu", 20*eye(cf.n - cf.m),  "Kdu", 10*eye(cf.n - cf.m));
+                                    "Kpa", eye(cf.m),         "Kda", eye(cf.m), ...
+                                    "Kpu", eye(cf.n - cf.m),  "Kdu", eye(cf.n - cf.m));
 [t_sim, x_sim] = ode15s(ODEFUN, t, x0);
-
 % Column Notation
 x_sim = x_sim';
 
 %% Video
-T1.plotqt(t_sim, x_sim', "record", false);
+% T1.plotqt(t_sim, x_sim', "record", false);
 
 %% Plot Result (Configuration Space)
-figure
-subplot(4, 1, 1)
-plot(t_sim, x_sim(1, :), 'LineWidth', 2.0)
-hold on
-yline(q_des(1), 'LineWidth', 1.5, 'LineStyle', '--')
-hold off
-grid on
-xlabel("$t$ [s]", 'Interpreter', 'latex')
-ylabel("$\theta$", 'Interpreter', 'latex')
+if T1.CVRods{1}(1).dof == 1
+    figure
+    subplot(4, 1, 1)
+    plot(t_sim, x_sim(1, :), 'LineWidth', 2.0)
+    hold on
+    yline(q_des(1), 'LineWidth', 1.5, 'LineStyle', '--')
+    hold off
+    grid on
+    xlabel("$t$ [s]", 'Interpreter', 'latex')
+    ylabel("$\theta$", 'Interpreter', 'latex')
+    
+    subplot(4, 1, 2)
+    plot(t_sim, x_sim(2:end, :), 'LineWidth', 2.0)
+    hold on
+    yline(q_des(2:end), 'LineWidth', 1.5, 'LineStyle', '--')
+    hold off
+    grid on
+    xlabel("$t$ [s]", 'Interpreter', 'latex')
+    ylabel("$\kappa$", 'Interpreter', 'latex')
+    
+    subplot(4, 1, 3)
+    plot(t_sim, x_sim(n + 1, :), 'LineWidth', 2.0)
+    grid on
+    xlabel("$t$ [s]", 'Interpreter', 'latex')
+    ylabel("$\dot{\theta}$", 'Interpreter', 'latex')
+    
+    subplot(4, 1, 4)
+    plot(t_sim, x_sim(n + 2:end, :), 'LineWidth', 2.0)
+    grid on
+    xlabel("$t$ [s]", 'Interpreter', 'latex')
+    ylabel("$\dot{\kappa}$", 'Interpreter', 'latex')
+else
+    switch(control_law)
+        case "collocated_PD_FF"
+            %% Convert in Collocated Variables
+            N_sim = length(t_sim);
+            z_sim = zeros(2*cf.n, N_sim);
 
-subplot(4, 1, 2)
-plot(t_sim, x_sim(2:end, :), 'LineWidth', 2.0)
-hold on
-yline(q_des(2:end), 'LineWidth', 1.5, 'LineStyle', '--')
-hold off
-grid on
-xlabel("$t$ [s]", 'Interpreter', 'latex')
-ylabel("$\kappa$", 'Interpreter', 'latex')
+            % Target
+            [theta_des, theta_dot_des] = cf.transform(q_des, q_dot_des);
 
-subplot(4, 1, 3)
-plot(t_sim, x_sim(n + 1, :), 'LineWidth', 2.0)
-grid on
-xlabel("$t$ [s]", 'Interpreter', 'latex')
-ylabel("$\dot{\theta}$", 'Interpreter', 'latex')
+            % Convert
+            for i = 1:N_sim
+                z_sim(:, i) = cf.groupTransform(x_sim(:, i));
+            end
 
-subplot(4, 1, 4)
-plot(t_sim, x_sim(n + 2:end, :), 'LineWidth', 2.0)
-grid on
-xlabel("$t$ [s]", 'Interpreter', 'latex')
-ylabel("$\dot{\kappa}$", 'Interpreter', 'latex')
+            % Show
+            figure
+            subplot(4, 1, 1)
+            plot(t_sim, z_sim(1:cf.m, :), 'LineWidth', 2.0)
+            hold on
+            yline(theta_des(1:cf.m), 'LineWidth', 1.5, 'LineStyle', '--')
+            hold off
+            grid on
+            xlabel("$t$ [s]", 'Interpreter', 'latex')
+            ylabel("$\theta_a$", 'Interpreter', 'latex')
 
+            subplot(4, 1, 2)
+            plot(t_sim, z_sim(cf.m + 1:cf.n, :), 'LineWidth', 2.0)
+            hold on
+            yline(theta_des(cf.m + 1:end), 'LineWidth', 1.5, 'LineStyle', '--')
+            hold off
+            grid on
+            xlabel("$t$ [s]", 'Interpreter', 'latex')
+            ylabel("$\theta_u$", 'Interpreter', 'latex')
+
+            subplot(4, 1, 3)
+            plot(t_sim, z_sim(cf.n + 1: cf.n + cf.m, :), 'LineWidth', 2.0)
+            hold on
+            yline(theta_dot_des(1:cf.m), 'LineWidth', 1.5, 'LineStyle', '--')
+            hold off
+            grid on
+            xlabel("$t$ [s]", 'Interpreter', 'latex')
+            ylabel("$\dot{\theta}_a$", 'Interpreter', 'latex')
+
+            subplot(4, 1, 4)
+            plot(t_sim, z_sim(cf.n + cf.m + 1:end, :), 'LineWidth', 2.0)
+            hold on
+            yline(theta_dot_des(cf.m + 1:end), 'LineWidth', 1.5, 'LineStyle', '--')
+            hold off
+            grid on
+            xlabel("$t$ [s]", 'Interpreter', 'latex')
+            ylabel("$\dot{\theta}_u$", 'Interpreter', 'latex')
+
+            % % Show
+            % figure
+            % subplot(2, 1, 1)
+            % plot(t_sim, x_sim(1:cf.n, :), 'LineWidth', 2.0)
+            % hold on
+            % yline(q_des, 'LineWidth', 1.5, 'LineStyle', '--')
+            % hold off
+            % grid on
+            % xlabel("$t$ [s]", 'Interpreter', 'latex')
+            % ylabel("$q$", 'Interpreter', 'latex')
+            % 
+            % subplot(2, 1, 2)
+            % plot(t_sim, x_sim(cf.n + 1:end, :), 'LineWidth', 2.0)
+            % hold on
+            % yline(q_dot_des, 'LineWidth', 1.5, 'LineStyle', '--')
+            % hold off
+            % grid on
+            % xlabel("$t$ [s]", 'Interpreter', 'latex')
+            % ylabel("$\dot{q}$", 'Interpreter', 'latex')
+
+        case "classic_PD_FF"
+            % Show
+            figure
+            subplot(2, 1, 1)
+            plot(t_sim, x_sim(1:cf.n, :), 'LineWidth', 2.0)
+            hold on
+            yline(q_des, 'LineWidth', 1.5, 'LineStyle', '--')
+            hold off
+            grid on
+            xlabel("$t$ [s]", 'Interpreter', 'latex')
+            ylabel("$q$", 'Interpreter', 'latex')
+        
+            subplot(2, 1, 2)
+            plot(t_sim, x_sim(cf.n + 1:end, :), 'LineWidth', 2.0)
+            hold on
+            yline(q_dot_des, 'LineWidth', 1.5, 'LineStyle', '--')
+            hold off
+            grid on
+            xlabel("$t$ [s]", 'Interpreter', 'latex')
+            ylabel("$\dot{q}$", 'Interpreter', 'latex')
+        otherwise
+            warning("Control Law not supported for visualization.")
+    end
+end
+
+%% Functions
 function u = classic_PD_FF(cf_obj, q_des, q, q_dot, options)
     arguments
         % Collocation Form object: useful for conversion
@@ -132,7 +244,7 @@ function u = classic_PD_FF(cf_obj, q_des, q, q_dot, options)
     end
 
     % Gravity and Stiffness Components
-    [~, Geq, Keq, ~] = cf_obj.dynamicMarices(q_des, zeros(cf_obj.n, 1));
+    [~, Geq, Keq, ~] = cf_obj.dynamicMatrices(q_des, zeros(cf_obj.n, 1));
 
     % Compute Control Law
     A = cf_obj.actuationMatrix(q);
@@ -176,11 +288,6 @@ function [u, theta_des, theta, theta_dot] = collocated_PD_FF(cf_obj, q_des, q, q
 
     %% Compute Control Law
     u = options.Kpa*(theta_des_a - theta_a) - options.Kda*(theta_dot_a) + Ga + Ka;
-
-    %% Additional Informations
-    if nargout > 1
-        
-    end
 end
 
 function u = noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
@@ -232,22 +339,24 @@ function x_dot = closed_loop(cf, t, x, options)
         t; 
         x;
         options.control_law = "classic_PD_FF";
-        options.Kpa = eye(cf.robot_linkage.nact);
-        options.Kda = eye(cf.robot_linkage.nact);
-        options.Kpu = eye(cf.robot_linkage.ndof - cf.robot_linkage.nact);
-        options.Kdu = eye(cf.robot_linkage.ndof - cf.robot_linkage.nact);
-        options.q_des = zeros(2*cf.robot_linkage.ndof, 1);
+        options.Kpa = eye(cf.m);
+        options.Kda = eye(cf.m);
+        options.Kpu = eye(cf.p);
+        options.Kdu = eye(cf.p);
+        options.q_des = zeros(2*cf.n, 1);
     end
 
     % Compute Control Action
-    u = zeros(cf.robot_linkage.nact, 1);
+    u = 1.0*ones(cf.m, 1);
 
     % Select control law
     switch options.control_law
+        case "autonomous"
+            u = zeros(cf.m, 1);
         case "classic_PD_FF"
             u = classic_PD_FF(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), "alpha", options.Kpa, "beta", options.Kda);
         case "collocated_PD_FF"
-            u = collocated_PD_FF(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), "Kpa", options.Kpa, "Kda", options.Kda);
+            [u, ~, ~, ~] = collocated_PD_FF(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), "Kpa", options.Kpa, "Kda", options.Kda);
         case "noncollocated_PD_FF"
             u = noncollocated_PD_FF(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), ...
                                         "Kpa", options.Kpa, "Kda", options.Kda, ...
