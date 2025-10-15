@@ -113,6 +113,10 @@ classdef Collocated_Form < handle
             end
         end
         
+        function Jh = jacobian(obj, q)
+            Jh = [obj.actuationMatrix(q)'; zeros(obj.p, obj.m), eye(obj.p)];
+        end
+        
         %% Test Actuation Matrix
         function testActuation(obj, options)
             arguments

@@ -14,8 +14,8 @@ startup
 cd(current_path)
 
 %% Load Data
-% robot_name = "rsip";
-robot_name = "conical_hsupport";
+robot_name = "rsip";
+% robot_name = "conical_hsupport";
 
 % mat ext
 file_name = "robot_linkage";
@@ -42,10 +42,12 @@ T1.VLinks.color = hex2rgb(blue_sofft);
 % Camera Position
 T1.PlotParameters.CameraPosition = [-0.0316   -0.0001   -6.9004];
 
+% Update Linkage
+T1 = T1.Update();
+
 % Damping Joint
 if T1.CVRods{1}(1).dof == 1
     T1.D(1, 1) = 1e-2;
-
 else
     VLinks = T1.VLinks;
     VLinks.Eta = 0.8*VLinks.Eta;
@@ -57,10 +59,10 @@ else
             T1.CVRods{1}(2).UpdateAll();
         end
     end
-end
 
-% Update Linkage
-T1 = T1.Update();
+    % Update Linkage
+    T1 = T1.Update();
+end
 
 
 %% Simulation Setup
@@ -108,8 +110,28 @@ else
     load(equilibria_file);
 end
 
+% Stable Equilibrium
 q_des = equilibria(:, 1);
 q_dot_des = zeros(cf.n, 1);
+
+%% Linearized System
+addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS", "functions"))
+[A_lin, ~] = linearized_system(T1, q_des, q_dot_des, zeros(T1.nact, 1));
+
+% Show Root Locus
+lambda = eig(A_lin);
+
+figure
+plot(real(lambda), imag(lambda), 'x', 'MarkerSize', 10, 'LineWidth', 2.0, "Color", blue_sofft)
+hold on
+for i = 1:length(lambda)
+    label = num2str(i);
+    text(real(lambda(i)) + 0.2, imag(lambda(i)) + 0.2, label, 'FontSize', 16, 'Color', 'k', 'FontWeight', 'bold');
+end
+hold off
+grid on
+xlabel("Real")
+ylabel("Im")
 
 %% Show Different Control Laws
 Kpa = 1.0e+1*eye(cf.m);
