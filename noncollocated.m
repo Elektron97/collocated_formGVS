@@ -169,25 +169,28 @@ end
 
 % Palette
 poles_palette = [blue_sofft, "#00878d", "#00a065", "#8cae22", "#ffa600"];
+marker_size = 14;
 
 figure
 % Open Loop
-plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', 10, 'LineWidth', 2.0, "Color", blue_sofft)
+plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', marker_size, 'LineWidth', 3.0, "Color", blue_sofft)
 hold on
-for i = 1:length(lambda_ol)
-    label = num2str(i);
-    text(real(lambda_ol(i)) + 0.2, imag(lambda_ol(i)) + 0.2, label, 'FontSize', 16, 'Color', blue_sofft, 'FontWeight', 'bold');
-end
+% for i = 1:length(lambda_ol)
+%     label = num2str(i);
+%     text(real(lambda_ol(i)) + 0.2, imag(lambda_ol(i)) + 0.2, label, 'FontSize', 16, 'Color', blue_sofft, 'FontWeight', 'bold');
+% end
 
 % Closed Loop
 for i = 1:length(Kdus)
-    plot(real(lambda_cl{i}), imag(lambda_cl{i}), 'x', 'MarkerSize', 10, 'LineWidth', 2.0, "Color", poles_palette(i + 1))
+    plot(real(lambda_cl{i}), imag(lambda_cl{i}), 'x', 'MarkerSize', marker_size, 'LineWidth', 3.0, "Color", poles_palette(i + 1))
 end
 hold off
 grid on
-xlabel("Real")
-ylabel("Im")
+xlabel("Real ($\log$ scale)", 'Interpreter', 'latex')
+ylabel("Im", 'Interpreter', 'latex')
 set(gca, 'XScale', 'log')
+set(gca, 'FontSize', 14)
+set(gca, 'GridLineWidth', 1.5)
 
 %% Simulate
 % Store Controllers results
@@ -210,7 +213,10 @@ for i = 1:length(Kpus)
 end
 
 %% Visualization
-% T1.plotqt(t_sim{1}, x_sim{1}', "record", false)
+% for i = 1:length(Kdus)
+%     T1.VLinks.color = hex2rgb(poles_palette(i + 1));
+%     T1.plotqt(t_sim{i}, x_sim{i}', "record", true, "video_name", "noncollocated" + num2str(i));
+% end
 
 %% Convert in Collocated Variables
 z_sim = cell(length(Kpus), 1);
@@ -255,6 +261,8 @@ for j = 1:length(Kpus)
     grid on
     xlabel("$t$ [s]", 'Interpreter', 'latex')
     ylabel("$\theta_a$", 'Interpreter', 'latex')
+    set(gca, 'FontSize', 14)
+    set(gca, 'GridLineWidth', 1.5)
 
     subplot(4, 1, 2)
     hold on
@@ -263,6 +271,8 @@ for j = 1:length(Kpus)
     grid on
     xlabel("$t$ [s]", 'Interpreter', 'latex')
     ylabel("$\theta_u$", 'Interpreter', 'latex')
+    set(gca, 'FontSize', 14)
+    set(gca, 'GridLineWidth', 1.5)
 
     subplot(4, 1, 3)
     hold on
@@ -271,6 +281,8 @@ for j = 1:length(Kpus)
     grid on
     xlabel("$t$ [s]", 'Interpreter', 'latex')
     ylabel("$\dot{\theta}_a$", 'Interpreter', 'latex')
+    set(gca, 'FontSize', 14)
+    set(gca, 'GridLineWidth', 1.5)
 
     subplot(4, 1, 4)
     hold on
@@ -279,6 +291,8 @@ for j = 1:length(Kpus)
     grid on
     xlabel("$t$ [s]", 'Interpreter', 'latex')
     ylabel("$\dot{\theta}_u$", 'Interpreter', 'latex')
+    set(gca, 'FontSize', 14)
+    set(gca, 'GridLineWidth', 1.5)
 end
 
 %% Functions

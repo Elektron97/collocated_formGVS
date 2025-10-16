@@ -14,8 +14,8 @@ startup
 cd(current_path)
 
 %% Load Data
-robot_name = "rsip";
-% robot_name = "conical_hsupport";
+% robot_name = "rsip";
+robot_name = "conical_hsupport";
 
 % mat ext
 file_name = "robot_linkage";
@@ -301,13 +301,14 @@ else
 
             % Line Styles
             % markers = ["o", "+", "*", "x", "square"];
-            line_styles = ["-", "--", ":", "-."];
+            line_styles = ["-", "-", "-", "-"];
 
             % Active and Passive Colors
-            active_colors = ["#de425b", "#ed7883", "#f9a7ac", "#ffd5d7"];
-            passive_colors = ["#086888", "#5191ae", "#5191ae", "#bae9ff"];
+            % active_colors = ["#de425b", "#ed7883", "#f9a7ac", "#ffd5d7"];
+            % passive_colors = ["#086888", "#5191ae", "#5191ae", "#bae9ff"];
             % active_colors = ["#086888", "#009084", "#67ab3b", "#ffa600"];
             % passive_colors = active_colors;
+            palette = ["#00878d", "#00a065", "#8cae22", "#ffa600"];
 
             % Show
             figure(1)
@@ -329,7 +330,7 @@ else
                 % Show every simulation
                 subplot(4, 1, 1)
                 hold on
-                plot(t_sim{j}, z_sim{j}(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', active_colors(j))
+                plot(t_sim{j}, z_sim{j}(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', palette(j))
                 hold off
                 grid on
                 xlabel("$t$ [s]", 'Interpreter', 'latex')
@@ -337,7 +338,7 @@ else
     
                 subplot(4, 1, 2)
                 hold on
-                plot(t_sim{j}, z_sim{j}(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', passive_colors(j))
+                plot(t_sim{j}, z_sim{j}(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', palette(j))
                 hold off
                 grid on
                 xlabel("$t$ [s]", 'Interpreter', 'latex')
@@ -345,7 +346,7 @@ else
     
                 subplot(4, 1, 3)
                 hold on
-                plot(t_sim{j}, z_sim{j}(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', active_colors(j))
+                plot(t_sim{j}, z_sim{j}(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', palette(j))
                 hold off
                 grid on
                 xlabel("$t$ [s]", 'Interpreter', 'latex')
@@ -353,7 +354,7 @@ else
     
                 subplot(4, 1, 4)
                 hold on
-                plot(t_sim{j}, z_sim{j}(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', passive_colors(j))
+                plot(t_sim{j}, z_sim{j}(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', palette(j))
                 hold off
                 grid on
                 xlabel("$t$ [s]", 'Interpreter', 'latex')
