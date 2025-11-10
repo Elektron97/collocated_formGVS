@@ -76,7 +76,7 @@ n = T1.ndof;
 % Repeatable rng
 seed = 4;
 rng(seed);
-q0 = 0.1*randn(n, 1);
+q0 = 1.0e-4*randn(n, 1);
 qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
 
@@ -144,6 +144,25 @@ set(gca, 'GridLineWidth', 1.5)
 %% Check on Controllability
 rag = ctrb(A_theta, B_theta);
 
+%% Root Locus
+% % Define the D matrix (typically 0 for this type of system)
+% D = zeros(1, cf.m);
+% 
+% % Loop through each state to create a SISO system
+% for i = 1:2*n
+%     % Create the C matrix for the i-th state
+%     % This is the i-th canonical basis vector (e.g., [0 0 1 0 ...])
+%     C_i = zeros(1, 2*n);
+%     C_i(i) = 1;
+% 
+%     % Create the i-th state-space system
+%     % ss(A, B, C, D)
+%     syss{i} = ss(A_theta, B_theta, C_i, D);
+% end
+% 
+% % Show Root Locus
+% rlp = rlocusplot(syss{4});
+
 %% Pole Placement or LQR
 linear_control = "pole_placement"; % "pole_placement", "lqr"
 lambda_cl = lambda_ol;
@@ -153,7 +172,7 @@ switch(linear_control)
         % poles = -[0.1, 0.5, 1, 3.5, 5.0, 1000];
         % poles = -10.*[1, 2, 3, 4, 5, 6];
         % poles = [-0.0968 + 5.3344*i, -0.0968 - 5.3344*i, -1.0001, -3.3836 + 11.9153*i, -3.3836 - 11.9153*i, -4.8351e+04];
-        poles = [-0.1, -0.5, -1.0001, -3.0, -5.0, -4.8351e+04];
+        poles = [-0.3, -0.5, -1.0, -3.0, -5.0, -5.0e+4];
         [K_pp, precision] = place(A_theta, B_theta, poles);
 
         % Extract Gains
@@ -166,7 +185,7 @@ switch(linear_control)
         lambda_cl = eig(A_theta - B_theta*K_pp);
     case "lqr"
         %% Apply LQR
-        Q = blkdiag(1e+0*eye(cf.m), 1e+0*eye(cf.p), 1e+0*eye(cf.m), 1e+0*eye(cf.p));
+        Q = blkdiag(1e+0*eye(cf.m), 1e+2*eye(cf.p), 1e+0*eye(cf.m), 1e+2*eye(cf.p));
         R = 1e+0*eye(cf.m);
         
         % Solve Riccati
