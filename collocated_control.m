@@ -44,28 +44,29 @@ end
 q = filterEquilibria(q);
 
 %% Lyapunov Function
-function Vc = collocated_Lyapunov(theta_a, theta_ad, Ga_eq, Ka_eq, K_pa)
-    arguments
-        theta_a
-        theta_ad
-        Ga_eq
-        Ka_eq
-        K_pa = eye(length(theta_a));
-    end
-
-    % Compute Collocated Lyapunov Term
-    theta_tilde_a = theta_ad - theta_a;
-
-    % Minimum Eigenvalue from the matrix
-    [lambda, ~] = eig(K_pa);
-    lambda_min = min(lambda);
-
-    Vc = 0.5*(theta_tilde_a')*K_pa*theta_tilde_a + (theta_tilde_a')*(Ga_eq + Ka_eq) + 0.5*(norm(Ga_eq + Ka_eq)^2)/lambda_min;
-end
-
-% function H = energy(theta, theta_dot)
+% function Vc = collocated_Lyapunov(theta_a, theta_ad, Ga_eq, Ka_eq, K_pa)
 %     arguments
 %         theta_a
+%         theta_ad
+%         Ga_eq
+%         Ka_eq
+%         K_pa = eye(length(theta_a));
+%     end
+% 
+%     % Compute Collocated Lyapunov Term
+%     theta_tilde_a = theta_ad - theta_a;
+% 
+%     % Minimum Eigenvalue from the matrix
+%     [lambda, ~] = eig(K_pa);
+%     lambda_min = min(lambda);
+% 
+%     Vc = 0.5*(theta_tilde_a')*K_pa*theta_tilde_a + (theta_tilde_a')*(Ga_eq + Ka_eq) + 0.5*(norm(Ga_eq + Ka_eq)^2)/lambda_min;
+% end
+
+% function H = energy(cf_obj, theta, theta_dot)
+%     arguments
+%         cf_obj,
+%         theta,
 %         theta_ad
 %         Ga_eq
 %         Ka_eq

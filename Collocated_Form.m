@@ -257,6 +257,40 @@ classdef Collocated_Form < handle
             K = dynamic_matrices.K*q;
             D = dynamic_matrices.D;
         end
+
+        function [T, Uel, Ug] = mechanicalEnergy(obj, q, qdot)
+            % Dynamic Matrices in q
+            [M, ~, K, ~] = obj.transformSystem(q, qdot);
+        
+            % Kinetic Energy
+            T = 0.5*(qdot')*M*qdot;
+        
+            % Elastic Energy
+            Uel = 0.5*(q')*K;
+
+            % Gravitational Potential Energy
+            rho = obj.robot_linkage.VLinks(1).Rho;
+            A_handle = @(s) pi*obj.robot_linkage.VLinks(1).r{1}(s)^2;
+            g = obj.robot_linkage.G(4:6);
+
+            % Gauss-Legendre Integration
+            Ug = 0;
+            Xs = obj.robot_linkage.CVRods{1}(2).Xs;
+            Ws = obj.robot_linkage.CVRods{1}(2).Ws;
+
+            % Forward Kinematics
+            gs = obj.robot_linkage.FwdKinematics(q);
+
+            for i = 1:length(Xs)
+                % Unpacking gs
+                startIndex = (i - 1) * 4 + 1;
+                endIndex = i * 4;
+                current_g = gs(startIndex:endIndex, :);
+                r = current_g(1:3, 4);
+
+                Ug = Ug + Ws(i)*rho*A_handle(Xs(i))*(g')*r;
+            end
+        end
     
         function [M_theta, G_theta, K_theta, D_theta] = transformSystem(obj, q, qdot)
             % This function transform the system in the collocated form.
@@ -295,3 +329,5 @@ classdef Collocated_Form < handle
         end
     end
 end
+
+%% Utilities
