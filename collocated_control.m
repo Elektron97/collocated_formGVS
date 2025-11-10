@@ -26,12 +26,6 @@ load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 %% Collocated Form
 cf = Collocated_Form(T1);
 
-% % Test change of coordinates
-% q0 = randn(T1.ndof, 1);
-% qdot0 = randn(T1.ndof, 1);
-% [theta, theta_dot] = cf.transform(q0, qdot0);
-% [M_theta, G_theta, K_theta, D_theta] = cf.transformSystem(q0, qdot0);
-
 %% Equilibria of the System
 % Load EquilibriaGVS repo
 addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS"))
