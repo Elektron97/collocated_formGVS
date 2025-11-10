@@ -260,7 +260,7 @@ classdef Collocated_Form < handle
 
         function [T, Uel, Ug] = mechanicalEnergy(obj, q, qdot)
             % Dynamic Matrices in q
-            [M, ~, K, ~] = obj.transformSystem(q, qdot);
+            [M, ~, K, ~] = obj.dynamicMatrices(q, qdot);
         
             % Kinetic Energy
             T = 0.5*(qdot')*M*qdot;
@@ -283,12 +283,12 @@ classdef Collocated_Form < handle
 
             for i = 1:length(Xs)
                 % Unpacking gs
-                startIndex = (i - 1) * 4 + 1;
-                endIndex = i * 4;
+                startIndex = ((i + 1) - 1) * 4 + 1;
+                endIndex = (i + 1) * 4;
                 current_g = gs(startIndex:endIndex, :);
                 r = current_g(1:3, 4);
 
-                Ug = Ug + Ws(i)*rho*A_handle(Xs(i))*(g')*r;
+                Ug = Ug + Ws(i)*(rho*A_handle(Xs(i)))*(g')*r;
             end
         end
     
@@ -329,5 +329,3 @@ classdef Collocated_Form < handle
         end
     end
 end
-
-%% Utilities
