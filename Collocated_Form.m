@@ -288,7 +288,7 @@ classdef Collocated_Form < handle
                 current_g = gs(startIndex:endIndex, :);
                 r = current_g(1:3, 4);
 
-                Ug = Ug + Ws(i)*(rho*A_handle(Xs(i)))*(g')*r;
+                Ug = Ug - Ws(i)*(rho*A_handle(Xs(i)))*(g')*r;
             end
         end
     

@@ -67,7 +67,6 @@ qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
 % Collocation Object
 cf = Collocated_Form(T1);
-
 %% Feasible Target
 regen_equilibria = false;
 equilibria_dir = fullfile("equilibria", "rcc");
@@ -94,11 +93,13 @@ end
 % Stable Equilibrium
 q_des = equilibria(:, 1);
 q_dot_des = zeros(cf.n, 1);
+%% Gains
+Kpa = 1;
+Kpu = 2;
 
 %% Plot Lyapunov
 % We will visualize V by sweeping q(1) and q(2), while holding all
 % other q_i and ALL q_dot at their desired equilibrium values.
-
 % Check if the robot has at least 2 DOFs for this plot
 if n < 2
     fprintf('Robot has < 2 DOFs, skipping q1 vs q2 plot.\n');
@@ -109,14 +110,15 @@ else
     % 1. Define a reasonable range for q1 and q2
     % (Centered around the equilibrium q_des)
     % You may need to adjust the '0.5' to a range that suits your robot
-    q1_range = linspace(q_des(1) -2*pi, q_des(1) + 2*pi, 100); % 40 points
-    q2_range = linspace(q_des(2) - 10, q_des(2) + 10, 100); % 40 points
+    q1_range = linspace(q_des(1) -2*pi, q_des(1) + 2*pi, 100); % 100 points
+    q2_range = linspace(q_des(2) - 10, q_des(2) + 10, 100); % 100 points
     
     % 2. Create a 2D grid
     [Q1, Q2] = meshgrid(q1_range, q2_range);
     
-    % 3. Initialize an empty matrix to store V
+    % 3. Initialize empty matrices to store V and its quadratic part
     V_grid = zeros(size(Q1));
+    V_quad_grid = zeros(size(Q1)); % <-- ADDED
     
     % 4. Define the fixed values (all velocities are zero)
     q_dot_fixed = q_dot_des; 
@@ -137,29 +139,29 @@ else
             % q_dot_val is held constant at q_dot_des (zeros)
             
             % Call your non-vectorizable function
-            V_grid(i, j) = lyapunov(cf, q_val, q_dot_fixed, q_des, q_dot_des);
+            % <-- MODIFIED to get two outputs
+            [V_grid(i, j), V_quad_grid(i, j)] = lyapunov(cf, q_val, q_dot_fixed, q_des, q_dot_des, Kpa, Kpu);
         end
     end
     fprintf('Calculation complete.\n');
     
-    % --- Visualization 1: 3D Surface ---
+    % --- Visualization 1: 3D Surface (Total V) ---
     figure;
     surf(Q1, Q2, V_grid);
     xlabel('Position (q_1)');
     ylabel('Position (q_2)');
     zlabel('Lyapunov Function Value (V)');
-    title('Lyapunov Function Slice (Velocities = 0)');
+    title('Lyapunov Function Slice (VelocITIES = 0)');
     colorbar;
     shading interp;
     hold on;
     % Mark the equilibrium
-    % Calculate V at the equilibrium (should be 0 or min)
-    V_min = lyapunov(cf, q_des, q_dot_des, q_des, q_dot_des);
+    [V_min, ~] = lyapunov(cf, q_des, q_dot_des, q_des, q_dot_des, Kpa, Kpu);
     plot3(q_des(1), q_des(2), V_min, 'r*', 'MarkerSize', 10, 'LineWidth', 2);
-    legend('V(q_1, q_2, ...)', 'Equilibrium Point');
+    legend('Full Lyapunov V', 'Equilibrium Point');
     hold off;
     
-    % --- Visualization 2: 2D Contour Plot ---
+    % --- Visualization 2: 2D Contour Plot (Total V) ---
     figure;
     contourf(Q1, Q2, V_grid, 20);
     xlabel('Position (q_1)');
@@ -173,30 +175,52 @@ else
     plot(q_des(1), q_des(2), 'r+', 'MarkerSize', 12, 'LineWidth', 2);
     legend('Level Sets', 'Equilibrium Point');
     hold off;
+    
+    % --- Visualization 3: 3D Surface (Quadratic Term ONLY) ---
+    % <-- NEW PLOT ADDED
+    figure;
+    surf(Q1, Q2, V_quad_grid);
+    xlabel('Position (q_1)');
+    ylabel('Position (q_2)');
+    zlabel('Lyapunov Value (V_{quad})');
+    title('Quadratic Term (0.5*\theta^T*Kp*\theta) Only');
+    colorbar;
+    shading interp;
+    hold on;
+    % Mark the equilibrium
+    [~, V_quad_min] = lyapunov(cf, q_des, q_dot_des, q_des, q_dot_des, Kpa, Kpu);
+    plot3(q_des(1), q_des(2), V_quad_min, 'r*', 'MarkerSize', 10, 'LineWidth', 2);
+    legend('Quadratic Term', 'Equilibrium Point');
+    hold off;
+
 end
 
 %% Lyapunov Function Definition
-function V = lyapunov(cf_obj, q, q_dot, q_des, q_dot_des)
+% <-- MODIFIED to return two values
+function [V_total, V_quad] = lyapunov(cf_obj, q, q_dot, q_des, q_dot_des, Kpa, Kpu)
     % Potential Energy at the equilbrium
     [~, Uel_des, Ug_des] = cf_obj.mechanicalEnergy(q_des, q_dot_des);
-
     % Mechanical Energy at q, qdot
     [T, Uel, Ug] = cf_obj.mechanicalEnergy(q, q_dot);
-
     % Correction term
     [~, G_theta, K_theta, ~] = cf_obj.transformSystem(q_des, q_dot_des);
     [theta, ~] = cf_obj.transform(q, q_dot);
-
     % Desired Equilibrium in theta
     [theta_des, ~] = cf_obj.transform(q_des, q_dot_des);
-
     % Error in collocated variable
     theta_tilde = theta_des - theta;
     theta_tilde_a = theta_tilde(1:cf_obj.m);
+    % Gain
+    Kp = [Kpa, Kpu; zeros(cf_obj.p, cf_obj.n)];
 
-    % Compute Lyapunov Function
-    % V = T + Uel + Ug;
-    V = T + Uel + Ug - Uel_des - Ug_des;
-    V = V + (theta_tilde_a')*(G_theta(1:cf_obj.m) + K_theta(1:cf_obj.m));
-    % V = V + 0.5*theta_tilde*Kp*theta_tilde;
+    % --- Break down the V terms ---
+    % 1. Mechanical Energy part
+    V_energy = T + Uel + Ug - Uel_des - Ug_des;
+    % 2. Correction part
+    V_correction = (theta_tilde_a')*(G_theta(1:cf_obj.m) + K_theta(1:cf_obj.m));
+    % 3. Quadratic part (the one you want to see separately)
+    V_quad = 0.5*(theta_tilde')*Kp*theta_tilde;
+    
+    % Compute total Lyapunov Function
+    V_total = V_energy + V_correction + V_quad;
 end
