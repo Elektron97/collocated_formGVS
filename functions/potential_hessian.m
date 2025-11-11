@@ -17,5 +17,5 @@ function Gamma = potential_hessian(robot_linkage, q, qd, u)
     [~,~,~,dID_dq,~,~,~,dtau_dq,~,~,~,~,~,~,~] = robot_linkage.DAEJacobians(t, q, qd, qdd, u, lambda, dae_index);
 
     % Compute the Hessian
-    Gamma = dtau_dq - dID_dq;
+    Gamma = dID_dq - dtau_dq;
 end

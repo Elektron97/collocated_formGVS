@@ -336,12 +336,12 @@ function u = nonlinear_noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
     [~, ~, ~, D_theta] = cf_obj.transformSystem(q, zeros(cf_obj.n, 1));
 
     % Global Gain
-    K = 6;
+    K = 5;
 
     % Kpu = - 2*Gamma_{a, u} to maximize the convexity
-    Kpu = 2.0*K*Gamma_theta(1:cf_obj.m, (cf_obj.m+1):end);
+    Kpu = -2.0*K*Gamma_theta(1:cf_obj.m, (cf_obj.m+1):end);
     % Kdu = -2*D_{a, u} to maximize stability
-    Kdu = 2.0*K*D_theta(1:cf_obj.m, (cf_obj.m+1):end);
+    Kdu = -2.0*K*D_theta(1:cf_obj.m, (cf_obj.m+1):end);
 
     % Compute Control Law
     u_nc = Kpu*theta_tilde_u - Kdu*theta_dot(cf_obj.m + 1:end);
