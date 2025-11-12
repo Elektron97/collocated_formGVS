@@ -2,7 +2,6 @@
 clear all
 close all
 clc
-
 %% Load and Startup SoRoSim
 % Clean StartUp
 diff_sorosim_path = fullfile("SoRoSim", "Differentiable_SoRoSim");
@@ -11,7 +10,6 @@ startup
 % Switch again to the current directory
 [current_path, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
 cd(current_path)
-
 %% Load Data
 robot_name = "rsip";
 % robot_name = "conical_hsupport";
@@ -20,7 +18,6 @@ file_name = "robot_linkage";
 mat_ext = ".mat";
 % Load Robot and Data
 load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
-
 %% Update Robot
 % Camera Position
 T1.PlotParameters.Light = false;
@@ -55,7 +52,6 @@ else
     % Update Linkage
     T1 = T1.Update();
 end
-
 %% Simulation Setup
 fs = 1e+3;
 tf = 50;
@@ -106,41 +102,190 @@ addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS", "functions"))
 %% Change Coordinates of the linearized system
 Jh = cf.jacobian(q_des);
 T = blkdiag(Jh, Jh);
-
 % Change of Basis in the Linearized System
 A_theta = inv(T)*A_lin*T;
 B_theta = inv(T)*B_lin;
 
 %% Show Open-Loop EigenValues
 lambda_ol = eig(A_theta);
-marker_size = 14;
-
-fig = figure;
-% Open Loop
-plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', marker_size, 'LineWidth', 3.0, "Color", "#de425b")
-hold off
+marker_size = 12;
+line_width = 2.0;
+% Plot Open-Loop poles on a standard s-plane
+% Note: Removed log scale as it's not suitable for negative real parts (stability)
+fig_ol = figure;
+plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', marker_size, 'LineWidth', line_width, "Color", "#de425b")
+hold on
 grid on
-xlabel("Real ($\log$ scale)", 'Interpreter', 'latex')
-ylabel("Im", 'Interpreter', 'latex')
-set(gca, 'XScale', 'log')
+xlabel("Real Part", 'Interpreter', 'latex')
+ylabel("Imaginary Part", 'Interpreter', 'latex')
+title("Open-Loop Eigenvalues (Poles)", 'Interpreter', 'latex')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
-
-%% Increase Collocated Gains
-Kpa = 1.0*eye(cf.m);
-Kda = 1.0*eye(cf.m);
-Kpu = 0.0*ones(cf.m, cf.p);
-Kdu = 0.0*ones(cf.m, cf.p);
-
-% Full-State Feedback Gain
-K = [Kpa, Kpu, Kda, Kdu];
-
-% Closed-Loop Eigenvalues
-lambda_cl = eig(A_theta - B_theta*K);
-
-%% Plot Closed-Loop Eigenvalues
-figure(fig)
-hold on
-plot(real(lambda_cl), imag(lambda_cl), 'x', 'MarkerSize', marker_size, 'LineWidth', 3.0, "Color", blue_sofft)
+% Add axes at origin
+ax = gca;
+ax.XAxisLocation = 'origin';
+ax.YAxisLocation = 'origin';
 hold off
-legend("Open-Loop", "Closed-Loop")
+
+%% Setup for Gain Analysis
+% Define the range of gains to test (feel free to change this)
+gain_values = 1.0:0.01:10;
+num_gains = length(gain_values);
+
+% Get a colormap for plotting
+colors = parula(num_gains);
+
+% Define baseline gains (from your original script)
+Kpa_base = 1.0*eye(cf.m);
+Kda_base = 1.0*eye(cf.m);
+Kpu_base = 0.0*ones(cf.m, cf.p);
+Kdu_base = 0.0*ones(cf.m, cf.p);
+
+% Plotting parameters
+plot_marker_size = 10;
+plot_line_width = 2.0;
+ol_color = "#de425b"; % Open-loop color from your script
+
+%% 1. Varying Kpa
+figure;
+hold on
+grid on
+% Plot Open-Loop poles as reference
+plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', plot_marker_size, 'LineWidth', plot_line_width, "Color", ol_color);
+
+for i = 1:num_gains
+    k_val = gain_values(i);
+    
+    % Set gains: Vary Kpa, hold others at baseline
+    Kpa = k_val * eye(cf.m);
+    Kda = Kda_base;
+    Kpu = Kpu_base;
+    Kdu = Kdu_base;
+    
+    % Full-State Feedback Gain
+    K = [Kpa, Kpu, Kda, Kdu];
+    
+    % Closed-Loop Eigenvalues
+    lambda_cl = eig(A_theta - B_theta*K);
+    
+    % Plot closed-loop poles
+    plot(real(lambda_cl), imag(lambda_cl), 'x', 'MarkerSize', plot_marker_size-2, 'LineWidth', plot_line_width, 'Color', colors(i,:));
+end
+title('Root Locus: Varying $K_{pa}$', 'Interpreter', 'latex')
+xlabel("Real Part", 'Interpreter', 'latex')
+ylabel("Imaginary Part", 'Interpreter', 'latex')
+set(gca, 'FontSize', 14)
+set(gca, 'GridLineWidth', 1.5)
+ax = gca;
+ax.XAxisLocation = 'origin';
+ax.YAxisLocation = 'origin';
+% legend(legend_entries_kpa, 'Location', 'best') % Removed as requested
+hold off
+%% 2. Varying Kda
+figure;
+hold on
+grid on
+% Plot Open-Loop poles as reference
+plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', plot_marker_size, 'LineWidth', plot_line_width, "Color", ol_color);
+
+for i = 1:num_gains
+    k_val = gain_values(i);
+    
+    % Set gains: Vary Kda, hold others at baseline
+    Kpa = Kpa_base;
+    Kda = k_val * eye(cf.m);
+    Kpu = Kpu_base;
+    Kdu = Kdu_base;
+    
+    % Full-State Feedback Gain
+    K = [Kpa, Kpu, Kda, Kdu];
+    
+    % Closed-Loop Eigenvalues
+    lambda_cl = eig(A_theta - B_theta*K);
+    
+    % Plot closed-loop poles
+    plot(real(lambda_cl), imag(lambda_cl), 'x', 'MarkerSize', plot_marker_size-2, 'LineWidth', plot_line_width, 'Color', colors(i,:));
+end
+title('Root Locus: Varying $K_{da}$', 'Interpreter', 'latex')
+xlabel("Real Part", 'Interpreter', 'latex')
+ylabel("Imaginary Part", 'Interpreter', 'latex')
+set(gca, 'FontSize', 14)
+set(gca, 'GridLineWidth', 1.5)
+ax = gca;
+ax.XAxisLocation = 'origin';
+ax.YAxisLocation = 'origin';
+% legend(legend_entries_kda, 'Location', 'best') % Removed as requested
+hold off
+%% 3. Varying Kpu
+figure;
+hold on
+grid on
+% Plot Open-Loop poles as reference
+plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', plot_marker_size, 'LineWidth', plot_line_width, "Color", ol_color);
+
+for i = 1:num_gains
+    k_val = gain_values(i);
+    
+    % Set gains: Vary Kpu, hold others at baseline
+    Kpa = Kpa_base;
+    Kda = Kda_base;
+    Kpu = k_val * ones(cf.m, cf.p);
+    Kdu = Kdu_base;
+    
+    % Full-State Feedback Gain
+    K = [Kpa, Kpu, Kda, Kdu];
+    
+    % Closed-Loop Eigenvalues
+    lambda_cl = eig(A_theta - B_theta*K);
+    
+    % Plot closed-loop poles
+    plot(real(lambda_cl), imag(lambda_cl), 'x', 'MarkerSize', plot_marker_size-2, 'LineWidth', plot_line_width, 'Color', colors(i,:));
+end
+title('Root Locus: Varying $K_{pu}$', 'Interpreter', 'latex')
+xlabel("Real Part", 'Interpreter', 'latex')
+ylabel("Imaginary Part", 'Interpreter', 'latex')
+set(gca, 'FontSize', 14)
+set(gca, 'GridLineWidth', 1.5)
+ax = gca;
+ax.XAxisLocation = 'origin';
+ax.YAxisLocation = 'origin';
+% legend(legend_entries_kpu, 'Location', 'best') % Removed as requested
+hold off
+%% 4. Varying Kdu
+figure;
+hold on
+grid on
+% Plot Open-Loop poles as reference
+plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', plot_marker_size, 'LineWidth', plot_line_width, "Color", ol_color);
+
+for i = 1:num_gains
+    k_val = gain_values(i);
+    
+    % Set gains: Vary Kdu, hold others at baseline
+    Kpa = Kpa_base;
+    Kda = Kda_base;
+    Kpu = Kpu_base;
+    Kdu = k_val * ones(cf.m, cf.p);
+    
+    % Full-State Feedback Gain
+    K = [Kpa, Kpu, Kda, Kdu];
+    
+    % Closed-Loop Eigenvalues
+    lambda_cl = eig(A_theta - B_theta*K);
+    
+    % Plot closed-loop poles
+    plot(real(lambda_cl), imag(lambda_cl), 'x', 'MarkerSize', plot_marker_size-2, 'LineWidth', plot_line_width, 'Color', colors(i,:));
+end
+title('Root Locus: Varying $K_{du}$', 'Interpreter', 'latex')
+xlabel("Real Part", 'Interpreter', 'latex')
+ylabel("Imaginary Part", 'Interpreter', 'latex')
+set(gca, 'FontSize', 14)
+set(gca, 'GridLineWidth', 1.5)
+ax = gca;
+ax.XAxisLocation = 'origin';
+ax.YAxisLocation = 'origin';
+% legend(legend_entries_kdu, 'Location', 'best') % Removed as requested
+hold off
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% END OF MODIFIED SECTION                                             %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
