@@ -2,6 +2,7 @@
 clear all
 close all
 clc
+
 %% Load and Startup SoRoSim
 % Clean StartUp
 diff_sorosim_path = fullfile("SoRoSim", "Differentiable_SoRoSim");
@@ -10,6 +11,7 @@ startup
 % Switch again to the current directory
 [current_path, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
 cd(current_path)
+
 %% Load Data
 robot_name = "rsip";
 % robot_name = "conical_hsupport";
@@ -18,6 +20,7 @@ file_name = "robot_linkage";
 mat_ext = ".mat";
 % Load Robot and Data
 load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
+
 %% Update Robot
 % Camera Position
 T1.PlotParameters.Light = false;
@@ -32,8 +35,10 @@ grey_mid = "#858583";
 T1.VLinks.color = hex2rgb(blue_sofft);
 % Camera Position
 T1.PlotParameters.CameraPosition = [-0.0316   -0.0001   -6.9004];
+
 % CC Segment
-T1.CVRods{1}(2).Phi_odr = zeros(6, 1);
+% T1.CVRods{1}(2).Phi_odr = zeros(6, 1);
+
 % Update Linkage
 T1 = T1.Update();
 % Damping Joint
@@ -52,6 +57,7 @@ else
     % Update Linkage
     T1 = T1.Update();
 end
+
 %% Simulation Setup
 fs = 1e+3;
 tf = 50;
@@ -67,9 +73,10 @@ qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
 % Collocation Object
 cf = Collocated_Form(T1);
+
 %% Feasible Target
 regen_equilibria = false;
-equilibria_dir = fullfile("equilibria", "rcc");
+equilibria_dir = fullfile("equilibria", "rsip");
 equilibria_file = fullfile(equilibria_dir, "equilibria" + mat_ext);
 % Regen Equilibria
 if(regen_equilibria || ~exist(equilibria_file, 'file'))
@@ -93,35 +100,23 @@ end
 % Stable Equilibrium
 q_des = equilibria(:, 1);
 q_dot_des = zeros(cf.n, 1);
+
 %% Linearized System
 addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS", "functions"))
 [A_lin, B_lin] = linearized_system(T1, q_des, q_dot_des, zeros(T1.nact, 1));
+
 %% Change Coordinates of the linearized system
 Jh = cf.jacobian(q_des);
 T = blkdiag(Jh, Jh);
 % Change of Basis in the Linearized System
 A_theta = inv(T)*A_lin*T;
 B_theta = inv(T)*B_lin;
+
 %% Show Open-Loop EigenValues
 lambda_ol = eig(A_theta);
 marker_size = 12;
 line_width = 2.0;
-% Plot Open-Loop poles on a standard s-plane
-% Note: Removed log scale as it's not suitable for negative real parts (stability)
-% fig_ol = figure;
-% plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', marker_size, 'LineWidth', line_width, "Color", "#de425b")
-% hold on
-% grid on
-% xlabel("Real Part", 'Interpreter', 'latex')
-% ylabel("Imaginary Part", 'Interpreter', 'latex')
-% title("Open-Loop Eigenvalues (Poles)", 'Interpreter', 'latex')
-% set(gca, 'FontSize', 14)
-% set(gca, 'GridLineWidth', 1.5)
-% % Add axes at origin
-% ax = gca;
-% ax.XAxisLocation = 'origin';
-% ax.YAxisLocation = 'origin';
-% hold off
+
 %% Setup for Gain Analysis
 % Define baseline gains (from your original script)
 Kpa_base = 1.0*eye(cf.m);
@@ -132,9 +127,10 @@ Kdu_base = 0.0*ones(cf.m, cf.p);
 plot_marker_size = 10;
 plot_line_width = 2.0;
 ol_color = "#de425b"; % Open-loop color from your script
+
 %% 1. Varying Kpa
 % Define the range of gains for Kpa
-gain_values_kpa = 1.0:0.1:20; % <-- CHANGE THIS RANGE
+gain_values_kpa = 1.0:0.1:10; % <-- CHANGE THIS RANGE
 num_gains = length(gain_values_kpa);
 colors = turbo(num_gains);
 
@@ -164,6 +160,7 @@ end
 title('Root Locus: Varying $K_{pa}$', 'Interpreter', 'latex')
 xlabel("Real Part", 'Interpreter', 'latex')
 ylabel("Imaginary Part", 'Interpreter', 'latex')
+set(gca, 'XScale', 'log')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
 ax = gca;
@@ -171,9 +168,10 @@ ax.XAxisLocation = 'origin';
 ax.YAxisLocation = 'origin';
 % legend(legend_entries_kpa, 'Location', 'best') % Removed as requested
 hold off
+
 %% 2. Varying Kda
 % Define the range of gains for Kda
-gain_values_kda = 1.0:0.1:20.0; % <-- CHANGE THIS RANGE
+gain_values_kda = 1.0:0.1:10.0; % <-- CHANGE THIS RANGE
 num_gains = length(gain_values_kda);
 colors = turbo(num_gains);
 
@@ -205,14 +203,16 @@ xlabel("Real Part", 'Interpreter', 'latex')
 ylabel("Imaginary Part", 'Interpreter', 'latex')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
+set(gca, 'XScale', 'log')
 ax = gca;
 ax.XAxisLocation = 'origin';
 ax.YAxisLocation = 'origin';
 % legend(legend_entries_kda, 'Location', 'best') % Removed as requested
 hold off
+
 %% 3. Varying Kpu
 % Define the range of gains for Kpu
-gain_values_kpu = 0.0:0.01:10.0; % <-- CHANGE THIS RANGE
+gain_values_kpu = 0.0:0.01:2.0; % <-- CHANGE THIS RANGE
 num_gains = length(gain_values_kpu);
 colors = turbo(num_gains);
 
@@ -244,14 +244,16 @@ xlabel("Real Part", 'Interpreter', 'latex')
 ylabel("Imaginary Part", 'Interpreter', 'latex')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
+set(gca, 'XScale', 'log')
 ax = gca;
 ax.XAxisLocation = 'origin';
 ax.YAxisLocation = 'origin';
 % legend(legend_entries_kpu, 'Location', 'best') % Removed as requested
 hold off
+
 %% 4. Varying Kdu
 % Define the range of gains for Kdu
-gain_values_kdu = 0.0:0.01:10.0; % <-- CHANGE THIS RANGE
+gain_values_kdu = 0.0:0.01:2.0; % <-- CHANGE THIS RANGE
 num_gains = length(gain_values_kdu);
 colors = turbo(num_gains);
 
@@ -283,11 +285,13 @@ xlabel("Real Part", 'Interpreter', 'latex')
 ylabel("Imaginary Part", 'Interpreter', 'latex')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
+set(gca, 'XScale', 'log')
 ax = gca;
 ax.XAxisLocation = 'origin';
 ax.YAxisLocation = 'origin';
 % legend(legend_entries_kdu, 'Location', 'best') % Removed as requested
 hold off
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% END OF MODIFIED SECTION                                             %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

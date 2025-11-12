@@ -185,13 +185,13 @@ switch(linear_control)
         lambda_cl = eig(A_theta - B_theta*K_pp);
     case "lqr"
         %% Apply LQR
-        % Q = blkdiag(1e+0*eye(cf.m), 1e+2*eye(cf.p), 1e+0*eye(cf.m), 1e+2*eye(cf.p));
+        % Q = blkdiag(1e+0*eye(cf.m), 1e+0*eye(cf.p), 1e+0*eye(cf.m), 1e+0*eye(cf.p));
         % R = 1e+0*eye(cf.m);
 
         % Minimize Vibrations
         % || \dot{q} ||^{2}
         Q = blkdiag(0e+0*eye(cf.m), 0e+0*eye(cf.p), 1e+0*eye(cf.m), 1e+0*eye(cf.p));
-        R = 1e+0*eye(cf.m);
+        R = 1e-9*eye(cf.m);
 
         % Solve Riccati
         [K_lqr, ~, lambda_cl] = lqr(A_theta, B_theta, Q, R);

@@ -53,7 +53,6 @@ else
     T1 = T1.Update();
 end
 
-
 %% Simulation Setup
 fs = 1e+3;
 tf = 50;
@@ -61,12 +60,14 @@ t0 = 0;
 t = 0:(1/fs):tf;
 N_time = length(t);
 n = T1.ndof;
+
 % Repeatable rng
 seed = 4;
 rng(seed);
 q0 = 1.0e-1*randn(n, 1);
 qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
+
 % Collocation Object
 cf = Collocated_Form(T1);
 
@@ -103,7 +104,8 @@ Kda = eye(cf.m);
 
 %% Simulate for multiple K values
 % Define K values to test
-K_values = linspace(0, 20, 8);
+% K_values = linspace(0, 50, 8);
+K_values = 0:50;
 N_sims = length(K_values);
 
 % Get control law
@@ -113,6 +115,13 @@ control_law = "nonlinear_noncollocated_PD_FF";
 t_sim_all = cell(N_sims, 1);
 x_sim_all = cell(N_sims, 1);
 z_sim_all = cell(N_sims, 1);
+
+% --- MODIFICATION 1: Pre-allocation for ISE ---
+% Pre-calculate desired collocated position vector
+[theta_des, theta_dot_des] = cf.transform(q_des, q_dot_des);
+% Pre-allocate array for ISE values
+ISE_values = zeros(N_sims, 1);
+% --- END MODIFICATION 1 ---
 
 fprintf('Running %d simulations for different K values...\n', N_sims);
 
@@ -144,6 +153,25 @@ for k = 1:N_sims
         z_sim_k(:, i) = cf.groupTransform(x_sim_k_transposed(:, i));
     end
     z_sim_all{k} = z_sim_k;
+
+    % --- MODIFICATION 2: ISE Calculation ---
+    % Get time and state for this simulation
+    t_sim_k = t_sim_all{k};         % [N_sim_steps x 1]
+    z_sim_k = z_sim_all{k};         % [2*n x N_sim_steps]
+    
+    % Error
+    error_k = z_sim_k - [theta_des; theta_dot_des];
+    % error_k = z_sim_k(1:cf.n, :) - theta_des;
+    % error_k = z_sim_k(cf.n + 1:end, :) - theta_dot_des;
+    
+    % Calculate the squared norm of the error at each time step: e(t)'*e(t)
+    % sum(error_k.^2, 1) squares elements and sums down columns
+    squared_error_norm_k = sum(error_k.^2, 1); % [1 x N_sim_steps]
+    
+    % Integrate over time using trapezoidal rule
+    % Note: t_sim_k must be [N_sim_steps x 1] and squared_error_norm_k must be [1 x N_sim_steps] or [N_sim_steps x 1]
+    ISE_values(k) = trapz(t_sim_k, squared_error_norm_k);
+    % --- END MODIFICATION 2 ---
 end
 
 fprintf('Simulations complete. Plotting results...\n');
@@ -152,10 +180,9 @@ fprintf('Simulations complete. Plotting results...\n');
 % Load Custom Colormap
 load("SoFFTColormap.mat")
 
-% --- MODIFICATION START ---
 % Get colormap
 colors = turbo(N_sims);
-line_width = 2.5;
+line_width = 2.0;
 line_style = "-";
 
 % Create legend entries
@@ -224,7 +251,28 @@ xlabel("$t$ [s]", 'Interpreter', 'latex')
 ylabel("$\dot{\theta}_u$", 'Interpreter', 'latex')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
-% --- MODIFICATION END ---
+
+
+% --- MODIFICATION 3: Plot ISE vs. K ---
+%% Plot ISE vs. K
+figure
+plot(K_values, ISE_values, 'o-', 'LineWidth', 2, 'MarkerSize', 8, 'Color', red_target)
+hold on
+% Find the minimum ISE
+[min_ISE, min_idx] = min(ISE_values);
+min_K = K_values(min_idx);
+% Plot a marker for the minimum
+plot(min_K, min_ISE, 'p', 'MarkerSize', 14, 'MarkerFaceColor', blue_sofft, 'MarkerEdgeColor', 'k')
+legend('ISE', sprintf('Min ISE at K = %.2f', min_K), 'Location', 'best')
+
+xlabel('Gain $K$', 'Interpreter', 'latex')
+ylabel('ISE: $\int ||e(t)||^2 dt$', 'Interpreter', 'latex')
+title('ISE (Integral of Squared Error) vs. Gain $K$', 'Interpreter', 'latex')
+grid on
+set(gca, 'FontSize', 14)
+set(gca, 'GridLineWidth', 1.5)
+% --- END MODIFICATION 3 ---
+
 
 %% Functions
 function x_dot = dynamics(robot_linkage, t, x, u)
@@ -269,6 +317,7 @@ function x_dot = closed_loop(cf, t, x, options)
     % Compute Dynamics
     x_dot = dynamics(cf.robot_linkage, t, x, u);
 end
+
 %% Collocated Law
 function [u, theta_des, theta, theta_dot] = collocated_PD_FF(cf_obj, q_des, q, q_dot, options)
     arguments
@@ -299,6 +348,7 @@ function [u, theta_des, theta, theta_dot] = collocated_PD_FF(cf_obj, q_des, q, q
     %% Compute Control Law
     u = options.Kpa*(theta_des_a - theta_a) - options.Kda*(theta_dot_a) + Ga + Ka;
 end
+
 %% Non-collocated Law
 function u = noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
     arguments

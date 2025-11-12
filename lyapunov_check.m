@@ -2,6 +2,7 @@
 clear all
 close all
 clc
+
 %% Load and Startup SoRoSim
 % Clean StartUp
 diff_sorosim_path = fullfile("SoRoSim", "Differentiable_SoRoSim");
@@ -10,6 +11,7 @@ startup
 % Switch again to the current directory
 [current_path, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
 cd(current_path)
+
 %% Load Data
 robot_name = "rsip";
 % robot_name = "conical_hsupport";
@@ -18,6 +20,7 @@ file_name = "robot_linkage";
 mat_ext = ".mat";
 % Load Robot and Data
 load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
+
 %% Update Robot
 % Camera Position
 T1.PlotParameters.Light = false;
@@ -52,6 +55,7 @@ else
     % Update Linkage
     T1 = T1.Update();
 end
+
 %% Simulation Setup
 fs = 1e+3;
 tf = 50;
@@ -67,6 +71,7 @@ qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
 % Collocation Object
 cf = Collocated_Form(T1);
+
 %% Feasible Target
 regen_equilibria = false;
 equilibria_dir = fullfile("equilibria", "rcc");
