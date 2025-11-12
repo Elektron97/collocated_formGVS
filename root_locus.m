@@ -67,7 +67,6 @@ qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
 % Collocation Object
 cf = Collocated_Form(T1);
-
 %% Feasible Target
 regen_equilibria = false;
 equilibria_dir = fullfile("equilibria", "rcc");
@@ -94,67 +93,58 @@ end
 % Stable Equilibrium
 q_des = equilibria(:, 1);
 q_dot_des = zeros(cf.n, 1);
-
 %% Linearized System
 addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS", "functions"))
 [A_lin, B_lin] = linearized_system(T1, q_des, q_dot_des, zeros(T1.nact, 1));
-
 %% Change Coordinates of the linearized system
 Jh = cf.jacobian(q_des);
 T = blkdiag(Jh, Jh);
 % Change of Basis in the Linearized System
 A_theta = inv(T)*A_lin*T;
 B_theta = inv(T)*B_lin;
-
 %% Show Open-Loop EigenValues
 lambda_ol = eig(A_theta);
 marker_size = 12;
 line_width = 2.0;
 % Plot Open-Loop poles on a standard s-plane
 % Note: Removed log scale as it's not suitable for negative real parts (stability)
-fig_ol = figure;
-plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', marker_size, 'LineWidth', line_width, "Color", "#de425b")
-hold on
-grid on
-xlabel("Real Part", 'Interpreter', 'latex')
-ylabel("Imaginary Part", 'Interpreter', 'latex')
-title("Open-Loop Eigenvalues (Poles)", 'Interpreter', 'latex')
-set(gca, 'FontSize', 14)
-set(gca, 'GridLineWidth', 1.5)
-% Add axes at origin
-ax = gca;
-ax.XAxisLocation = 'origin';
-ax.YAxisLocation = 'origin';
-hold off
-
+% fig_ol = figure;
+% plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', marker_size, 'LineWidth', line_width, "Color", "#de425b")
+% hold on
+% grid on
+% xlabel("Real Part", 'Interpreter', 'latex')
+% ylabel("Imaginary Part", 'Interpreter', 'latex')
+% title("Open-Loop Eigenvalues (Poles)", 'Interpreter', 'latex')
+% set(gca, 'FontSize', 14)
+% set(gca, 'GridLineWidth', 1.5)
+% % Add axes at origin
+% ax = gca;
+% ax.XAxisLocation = 'origin';
+% ax.YAxisLocation = 'origin';
+% hold off
 %% Setup for Gain Analysis
-% Define the range of gains to test (feel free to change this)
-gain_values = 1.0:0.01:10;
-num_gains = length(gain_values);
-
-% Get a colormap for plotting
-colors = parula(num_gains);
-
 % Define baseline gains (from your original script)
 Kpa_base = 1.0*eye(cf.m);
 Kda_base = 1.0*eye(cf.m);
 Kpu_base = 0.0*ones(cf.m, cf.p);
 Kdu_base = 0.0*ones(cf.m, cf.p);
-
 % Plotting parameters
 plot_marker_size = 10;
 plot_line_width = 2.0;
 ol_color = "#de425b"; % Open-loop color from your script
-
 %% 1. Varying Kpa
+% Define the range of gains for Kpa
+gain_values_kpa = 1.0:0.1:20; % <-- CHANGE THIS RANGE
+num_gains = length(gain_values_kpa);
+colors = turbo(num_gains);
+
 figure;
 hold on
 grid on
 % Plot Open-Loop poles as reference
 plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', plot_marker_size, 'LineWidth', plot_line_width, "Color", ol_color);
-
 for i = 1:num_gains
-    k_val = gain_values(i);
+    k_val = gain_values_kpa(i);
     
     % Set gains: Vary Kpa, hold others at baseline
     Kpa = k_val * eye(cf.m);
@@ -182,14 +172,18 @@ ax.YAxisLocation = 'origin';
 % legend(legend_entries_kpa, 'Location', 'best') % Removed as requested
 hold off
 %% 2. Varying Kda
+% Define the range of gains for Kda
+gain_values_kda = 1.0:0.1:20.0; % <-- CHANGE THIS RANGE
+num_gains = length(gain_values_kda);
+colors = turbo(num_gains);
+
 figure;
 hold on
 grid on
 % Plot Open-Loop poles as reference
 plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', plot_marker_size, 'LineWidth', plot_line_width, "Color", ol_color);
-
 for i = 1:num_gains
-    k_val = gain_values(i);
+    k_val = gain_values_kda(i);
     
     % Set gains: Vary Kda, hold others at baseline
     Kpa = Kpa_base;
@@ -217,14 +211,18 @@ ax.YAxisLocation = 'origin';
 % legend(legend_entries_kda, 'Location', 'best') % Removed as requested
 hold off
 %% 3. Varying Kpu
+% Define the range of gains for Kpu
+gain_values_kpu = 0.0:0.01:10.0; % <-- CHANGE THIS RANGE
+num_gains = length(gain_values_kpu);
+colors = turbo(num_gains);
+
 figure;
 hold on
 grid on
 % Plot Open-Loop poles as reference
 plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', plot_marker_size, 'LineWidth', plot_line_width, "Color", ol_color);
-
 for i = 1:num_gains
-    k_val = gain_values(i);
+    k_val = gain_values_kpu(i);
     
     % Set gains: Vary Kpu, hold others at baseline
     Kpa = Kpa_base;
@@ -252,14 +250,18 @@ ax.YAxisLocation = 'origin';
 % legend(legend_entries_kpu, 'Location', 'best') % Removed as requested
 hold off
 %% 4. Varying Kdu
+% Define the range of gains for Kdu
+gain_values_kdu = 0.0:0.01:10.0; % <-- CHANGE THIS RANGE
+num_gains = length(gain_values_kdu);
+colors = turbo(num_gains);
+
 figure;
 hold on
 grid on
 % Plot Open-Loop poles as reference
 plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', plot_marker_size, 'LineWidth', plot_line_width, "Color", ol_color);
-
 for i = 1:num_gains
-    k_val = gain_values(i);
+    k_val = gain_values_kdu(i);
     
     % Set gains: Vary Kdu, hold others at baseline
     Kpa = Kpa_base;

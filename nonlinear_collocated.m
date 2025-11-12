@@ -2,25 +2,20 @@
 clear all
 close all
 clc
-
 %% Load and Startup SoRoSim
 % Clean StartUp
 diff_sorosim_path = fullfile("SoRoSim", "Differentiable_SoRoSim");
 cd(diff_sorosim_path)
 startup
-
 % Switch again to the current directory
 [current_path, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
 cd(current_path)
-
 %% Load Data
 robot_name = "rsip";
 % robot_name = "conical_hsupport";
-
 % mat ext
 file_name = "robot_linkage";
 mat_ext = ".mat";
-
 % Load Robot and Data
 load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 addpath("functions")
@@ -29,23 +24,18 @@ addpath("functions")
 % Camera Position
 T1.PlotParameters.Light = false;
 T1.PlotParameters.ClosePrevious = false;
-
 % Axes Limits
 T1.PlotParameters.XLim = [-T1.VLinks.L, T1.VLinks.L];
 T1.PlotParameters.YLim = [-T1.VLinks.L, T1.VLinks.L];
-
 % Colors
 blue_sofft = "#086788";
 red_target = "#f06543";
 grey_mid = "#858583";
 T1.VLinks.color = hex2rgb(blue_sofft);
-
 % Camera Position
 T1.PlotParameters.CameraPosition = [-0.0316   -0.0001   -6.9004];
-
 % Update Linkage
 T1 = T1.Update();
-
 % Damping Joint
 if T1.CVRods{1}(1).dof == 1
     T1.D(1, 1) = 1e-2;
@@ -53,14 +43,12 @@ else
     VLinks = T1.VLinks;
     VLinks.Eta = 0.8*VLinks.Eta;
     T1.VLinks = VLinks;
-
     for i = 1:length(T1.CVRods)
         for j = 1:length(T1.CVRods{i})
             T1.CVRods{1}(1).UpdateAll();
             T1.CVRods{1}(2).UpdateAll();
         end
     end
-
     % Update Linkage
     T1 = T1.Update();
 end
@@ -73,14 +61,12 @@ t0 = 0;
 t = 0:(1/fs):tf;
 N_time = length(t);
 n = T1.ndof;
-
 % Repeatable rng
 seed = 4;
 rng(seed);
 q0 = 1.0e-1*randn(n, 1);
 qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
-
 % Collocation Object
 cf = Collocated_Form(T1);
 
@@ -88,7 +74,6 @@ cf = Collocated_Form(T1);
 regen_equilibria = false;
 equilibria_dir = fullfile("equilibria", robot_name);
 equilibria_file = fullfile(equilibria_dir, "equilibria" + mat_ext);
-
 % Regen Equilibria
 if(regen_equilibria || ~exist(equilibria_file, 'file'))
     % Load EquilibriaGVS repo
@@ -100,17 +85,14 @@ if(regen_equilibria || ~exist(equilibria_file, 'file'))
     equilibria = equilibriaGVS(T1, "input", u);
     % Filter Equilibria
     equilibria = filterEquilibria(equilibria);
-
     % Save Equilibria
     if(~exist(equilibria_dir, 'dir'))
         mkdir(equilibria_dir);
     end
-
     save(equilibria_file, "equilibria");
 else
     load(equilibria_file);
 end
-
 % Stable Equilibrium
 q_des = equilibria(:, 1);
 q_dot_des = zeros(cf.n, 1);
@@ -119,47 +101,95 @@ q_dot_des = zeros(cf.n, 1);
 Kpa = eye(cf.m);
 Kda = eye(cf.m);
 
-%% Simulate
-% Select Control Law
+%% Simulate for multiple K values
+% Define K values to test
+K_values = linspace(0, 20, 8);
+N_sims = length(K_values);
+
+% Get control law
 control_law = "nonlinear_noncollocated_PD_FF";
 
-ODEFUN = @(t, xk) closed_loop(cf, t, xk, "q_des", q_des, ...
-                                "control_law", control_law, ...
-                                "Kpa", Kpa, "Kda", Kda, ...
-                                "K", 5*eye(cf.p));
+% Pre-allocate cell arrays to store results
+t_sim_all = cell(N_sims, 1);
+x_sim_all = cell(N_sims, 1);
+z_sim_all = cell(N_sims, 1);
 
-[t_sim, x_sim] = ode15s(ODEFUN, t, x0);
-% Column Notation
-x_sim = x_sim';
+fprintf('Running %d simulations for different K values...\n', N_sims);
 
-%% Visualization
-N_sim = length(t_sim);
-z_sim = zeros(2*cf.n, N_sim);
-
-% Convert
-for i = 1:N_sim
-    z_sim(:, i) = cf.groupTransform(x_sim(:, i));
+% Loop over each K value
+for k = 1:N_sims
+    K_val = K_values(k);
+    K_mat = K_val * eye(cf.p);
+    
+    fprintf('  Simulating with K = %.2f\n', K_val);
+    
+    % Define the ODE function for the current K
+    ODEFUN = @(t, xk) closed_loop(cf, t, xk, "q_des", q_des, ...
+                                    "control_law", control_law, ...
+                                    "Kpa", Kpa, "Kda", Kda, ...
+                                    "K", K_mat); % Use the current K
+                                
+    % Run the simulation
+    [t_sim, x_sim] = ode15s(ODEFUN, t, x0);
+    
+    % Store results (transpose x_sim for consistency with original)
+    t_sim_all{k} = t_sim;
+    x_sim_all{k} = x_sim';
+    
+    % Post-process: Convert to z_sim
+    N_sim_steps = length(t_sim);
+    x_sim_k_transposed = x_sim_all{k}; % Already transposed
+    z_sim_k = zeros(2*cf.n, N_sim_steps);
+    for i = 1:N_sim_steps
+        z_sim_k(:, i) = cf.groupTransform(x_sim_k_transposed(:, i));
+    end
+    z_sim_all{k} = z_sim_k;
 end
 
-% marker = markers(j);
+fprintf('Simulations complete. Plotting results...\n');
+
+%% Visualization
+% Load Custom Colormap
+load("SoFFTColormap.mat")
+
+% --- MODIFICATION START ---
+% Get colormap
+colors = turbo(N_sims);
 line_width = 2.5;
 line_style = "-";
 
-% Show every simulation
+% Create legend entries
+legend_entries = cell(N_sims, 1);
+for k = 1:N_sims
+    legend_entries{k} = sprintf('K = %.2f', K_values(k));
+end
+
+% Create the figure
 figure
+
+% Subplot 1: \theta_a
 subplot(4, 1, 1)
 hold on
-plot(t_sim, z_sim(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', line_style)
+for k = 1:N_sims
+    plot(t_sim_all{k}, z_sim_all{k}(1:cf.m, :), ...
+        'LineWidth', line_width, 'LineStyle', line_style, 'Color', colors(k, :))
+end
 hold off
 grid on
 xlabel("$t$ [s]", 'Interpreter', 'latex')
 ylabel("$\theta_a$", 'Interpreter', 'latex')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
+% Add legend to the first plot
+legend(legend_entries, 'Location', 'best')
 
+% Subplot 2: \theta_u
 subplot(4, 1, 2)
 hold on
-plot(t_sim, z_sim(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', line_style)
+for k = 1:N_sims
+    plot(t_sim_all{k}, z_sim_all{k}(cf.m + 1:cf.n, :), ...
+        'LineWidth', line_width, 'LineStyle', line_style, 'Color', colors(k, :))
+end
 hold off
 grid on
 xlabel("$t$ [s]", 'Interpreter', 'latex')
@@ -167,9 +197,13 @@ ylabel("$\theta_u$", 'Interpreter', 'latex')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
 
+% Subplot 3: \dot{\theta}_a
 subplot(4, 1, 3)
 hold on
-plot(t_sim, z_sim(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', line_style)
+for k = 1:N_sims
+    plot(t_sim_all{k}, z_sim_all{k}(cf.n + 1: cf.n + cf.m, :), ...
+        'LineWidth', line_width, 'LineStyle', line_style, 'Color', colors(k, :))
+end
 hold off
 grid on
 xlabel("$t$ [s]", 'Interpreter', 'latex')
@@ -177,15 +211,20 @@ ylabel("$\dot{\theta}_a$", 'Interpreter', 'latex')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
 
+% Subplot 4: \dot{\theta}_u
 subplot(4, 1, 4)
 hold on
-plot(t_sim, z_sim(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', line_style)
+for k = 1:N_sims
+    plot(t_sim_all{k}, z_sim_all{k}(cf.n + cf.m + 1:end, :), ...
+        'LineWidth', line_width, 'LineStyle', line_style, 'Color', colors(k, :))
+end
 hold off
 grid on
 xlabel("$t$ [s]", 'Interpreter', 'latex')
 ylabel("$\dot{\theta}_u$", 'Interpreter', 'latex')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
+% --- MODIFICATION END ---
 
 %% Functions
 function x_dot = dynamics(robot_linkage, t, x, u)
@@ -195,7 +234,6 @@ function x_dot = dynamics(robot_linkage, t, x, u)
     % dxdt = [q_dot; q_2dot]
     x_dot = [x(robot_linkage.ndof + 1:end); y(1:robot_linkage.ndof)];
 end
-
 function x_dot = closed_loop(cf, t, x, options)
     arguments
         cf; 
@@ -209,10 +247,8 @@ function x_dot = closed_loop(cf, t, x, options)
         options.K = eye(cf.p);
         options.q_des = zeros(2*cf.n, 1);
     end
-
     % Compute Control Action
     u = 0.0*ones(cf.m, 1);
-
     % Select control law
     switch options.control_law
         case "autonomous"
@@ -230,94 +266,72 @@ function x_dot = closed_loop(cf, t, x, options)
         otherwise
             warning("Control Law not supported.")
     end
-
     % Compute Dynamics
     x_dot = dynamics(cf.robot_linkage, t, x, u);
 end
-
 %% Collocated Law
 function [u, theta_des, theta, theta_dot] = collocated_PD_FF(cf_obj, q_des, q, q_dot, options)
     arguments
         % Collocation Form object: useful for conversion
         cf_obj
-
         % Desired state (in joint space, not in the collocated variables)
         q_des
-
         % Feedback terms
         q
         q_dot
-
         % Gains
         options.Kpa = eye(cf_obj.m);
         options.Kda = eye(cf_obj.m);
     end
-
     %% Compute Compensation Terms
     [~, G_theta_des, K_theta_des, ~] = cf_obj.transformSystem(q_des, zeros(cf_obj.n, 1));
-
     % Extract collocated parts
     Ga = G_theta_des(1:cf_obj.m);
     Ka = K_theta_des(1:cf_obj.m);
-
     %% Convert Desired Configuration in Collocated Form
     [theta_des, ~] = cf_obj.transform(q_des, zeros(cf_obj.n, 1));
     theta_des_a = theta_des(1:cf_obj.m);
-
     %% Convert Feedback in the Collocated Variables
     [theta, theta_dot] = cf_obj.transform(q, q_dot);
-
     % Extract Collocated part
     theta_a = theta(1:cf_obj.m);
     theta_dot_a = theta_dot(1:cf_obj.m);
-
     %% Compute Control Law
     u = options.Kpa*(theta_des_a - theta_a) - options.Kda*(theta_dot_a) + Ga + Ka;
 end
-
 %% Non-collocated Law
 function u = noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
     arguments
         % Collocation Form object: useful for conversion
         cf_obj
-
         % Desired state (in joint space, not in the collocated variables)
         q_des
-
         % Feedback terms
         q
         q_dot
-
         % Gains
         options.Kpa = eye(cf_obj.m);
         options.Kda = eye(cf_obj.m);
         options.Kpu = eye(cf_obj.p);
         options.Kdu = eye(cf_obj.p);
     end
-
     % Collocated Term
     [u_c, theta_des, theta, theta_dot] = collocated_PD_FF(cf_obj, q_des, q, q_dot, "Kpa", options.Kpa, "Kda", options.Kda);
-
     % Add noncollocated term
     theta_tilde_u = theta_des(cf_obj.m + 1:end) - theta(cf_obj.m + 1:end);
     u_nc = options.Kpu*theta_tilde_u - options.Kdu*theta_dot(cf_obj.m + 1:end);
-
     % Compose the Actions
     u = u_c + u_nc;
 end
-
 function u = nonlinear_noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
     arguments
         % Collocation Form object: useful for conversion
         cf_obj
-
         % Desired state (in joint space, not in the collocated variables)
         q_des
-
         % Feedback terms
         q
         q_dot
-
         % Gains
         options.Kpa = eye(cf_obj.m);
         options.Kda = eye(cf_obj.m);
@@ -341,12 +355,11 @@ function u = nonlinear_noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
 
     % Kpu = - 2*Gamma_{a, u} to maximize the convexity
     Kpu = -2.0*Gamma_theta(1:cf_obj.m, (cf_obj.m+1):end)*options.K;
+    
     % Kdu = -2*D_{a, u} to maximize stability
     Kdu = -2.0*D_theta(1:cf_obj.m, (cf_obj.m+1):end)*options.K;
-
     % Compute Control Law
     u_nc = Kpu*theta_tilde_u - Kdu*theta_dot(cf_obj.m + 1:end);
-
     % Compose the Actions
     u = u_c + u_nc;
 end
