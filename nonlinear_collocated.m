@@ -125,7 +125,8 @@ control_law = "nonlinear_noncollocated_PD_FF";
 
 ODEFUN = @(t, xk) closed_loop(cf, t, xk, "q_des", q_des, ...
                                 "control_law", control_law, ...
-                                "Kpa", Kpa, "Kda", Kda);
+                                "Kpa", Kpa, "Kda", Kda, ...
+                                "K", 5*eye(cf.p));
 
 [t_sim, x_sim] = ode15s(ODEFUN, t, x0);
 % Column Notation
@@ -205,6 +206,7 @@ function x_dot = closed_loop(cf, t, x, options)
         options.Kda = eye(cf.m);
         options.Kpu = zeros(cf.m, cf.p);
         options.Kdu = zeros(cf.m, cf.p);
+        options.K = eye(cf.p);
         options.q_des = zeros(2*cf.n, 1);
     end
 
@@ -223,7 +225,8 @@ function x_dot = closed_loop(cf, t, x, options)
                                         "Kpu", options.Kpu, "Kdu", options.Kdu);
         case "nonlinear_noncollocated_PD_FF"
             u = nonlinear_noncollocated_PD_FF(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), ...
-                            "Kpa", options.Kpa, "Kda", options.Kda);
+                            "Kpa", options.Kpa, "Kda", options.Kda, ...
+                            "K", options.K);
         otherwise
             warning("Control Law not supported.")
     end
@@ -318,6 +321,7 @@ function u = nonlinear_noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
         % Gains
         options.Kpa = eye(cf_obj.m);
         options.Kda = eye(cf_obj.m);
+        options.K = eye(cf_obj.p);
     end
 
     % Collocated Term
@@ -335,13 +339,10 @@ function u = nonlinear_noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
     % Compute Damping in collocated variables
     [~, ~, ~, D_theta] = cf_obj.transformSystem(q, zeros(cf_obj.n, 1));
 
-    % Global Gain
-    K = 5;
-
     % Kpu = - 2*Gamma_{a, u} to maximize the convexity
-    Kpu = -2.0*K*Gamma_theta(1:cf_obj.m, (cf_obj.m+1):end);
+    Kpu = -2.0*Gamma_theta(1:cf_obj.m, (cf_obj.m+1):end)*options.K;
     % Kdu = -2*D_{a, u} to maximize stability
-    Kdu = -2.0*K*D_theta(1:cf_obj.m, (cf_obj.m+1):end);
+    Kdu = -2.0*D_theta(1:cf_obj.m, (cf_obj.m+1):end)*options.K;
 
     % Compute Control Law
     u_nc = Kpu*theta_tilde_u - Kdu*theta_dot(cf_obj.m + 1:end);

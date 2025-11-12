@@ -93,6 +93,7 @@ end
 % Stable Equilibrium
 q_des = equilibria(:, 1);
 q_dot_des = zeros(cf.n, 1);
+
 %% Gains
 Kpa = 1;
 Kpu = 2;

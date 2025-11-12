@@ -76,7 +76,7 @@ n = T1.ndof;
 % Repeatable rng
 seed = 4;
 rng(seed);
-q0 = 1.0e-4*randn(n, 1);
+q0 = 1.0e-1*randn(n, 1);
 qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
 
@@ -164,7 +164,7 @@ rag = ctrb(A_theta, B_theta);
 % rlp = rlocusplot(syss{4});
 
 %% Pole Placement or LQR
-linear_control = "pole_placement"; % "pole_placement", "lqr"
+linear_control = "lqr"; % "pole_placement", "lqr"
 lambda_cl = lambda_ol;
 
 switch(linear_control)
@@ -185,9 +185,14 @@ switch(linear_control)
         lambda_cl = eig(A_theta - B_theta*K_pp);
     case "lqr"
         %% Apply LQR
-        Q = blkdiag(1e+0*eye(cf.m), 1e+2*eye(cf.p), 1e+0*eye(cf.m), 1e+2*eye(cf.p));
+        % Q = blkdiag(1e+0*eye(cf.m), 1e+2*eye(cf.p), 1e+0*eye(cf.m), 1e+2*eye(cf.p));
+        % R = 1e+0*eye(cf.m);
+
+        % Minimize Vibrations
+        % || \dot{q} ||^{2}
+        Q = blkdiag(0e+0*eye(cf.m), 0e+0*eye(cf.p), 1e+0*eye(cf.m), 1e+0*eye(cf.p));
         R = 1e+0*eye(cf.m);
-        
+
         % Solve Riccati
         [K_lqr, ~, lambda_cl] = lqr(A_theta, B_theta, Q, R);
         
