@@ -2,6 +2,7 @@
 clear all
 close all
 clc
+
 %% Load and Startup SoRoSim
 % Clean StartUp
 diff_sorosim_path = fullfile("SoRoSim", "Differentiable_SoRoSim");
@@ -10,6 +11,7 @@ startup
 % Switch again to the current directory
 [current_path, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
 cd(current_path)
+
 %% Load Data
 robot_name = "rsip";
 % robot_name = "conical_hsupport";
@@ -64,7 +66,7 @@ n = T1.ndof;
 % Repeatable rng
 seed = 4;
 rng(seed);
-q0 = 1.0e-1*randn(n, 1);
+q0 = 1.0e+0*randn(n, 1);
 qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
 
@@ -105,7 +107,7 @@ Kda = eye(cf.m);
 %% Simulate for multiple K values
 % Define K values to test
 % K_values = linspace(0, 50, 8);
-K_values = 0:50;
+K_values = 0:0.5:50;
 N_sims = length(K_values);
 
 % Get control law
@@ -116,12 +118,10 @@ t_sim_all = cell(N_sims, 1);
 x_sim_all = cell(N_sims, 1);
 z_sim_all = cell(N_sims, 1);
 
-% --- MODIFICATION 1: Pre-allocation for ISE ---
 % Pre-calculate desired collocated position vector
 [theta_des, theta_dot_des] = cf.transform(q_des, q_dot_des);
 % Pre-allocate array for ISE values
 ISE_values = zeros(N_sims, 1);
-% --- END MODIFICATION 1 ---
 
 fprintf('Running %d simulations for different K values...\n', N_sims);
 
@@ -153,8 +153,7 @@ for k = 1:N_sims
         z_sim_k(:, i) = cf.groupTransform(x_sim_k_transposed(:, i));
     end
     z_sim_all{k} = z_sim_k;
-
-    % --- MODIFICATION 2: ISE Calculation ---
+    
     % Get time and state for this simulation
     t_sim_k = t_sim_all{k};         % [N_sim_steps x 1]
     z_sim_k = z_sim_all{k};         % [2*n x N_sim_steps]
@@ -171,7 +170,6 @@ for k = 1:N_sims
     % Integrate over time using trapezoidal rule
     % Note: t_sim_k must be [N_sim_steps x 1] and squared_error_norm_k must be [1 x N_sim_steps] or [N_sim_steps x 1]
     ISE_values(k) = trapz(t_sim_k, squared_error_norm_k);
-    % --- END MODIFICATION 2 ---
 end
 
 fprintf('Simulations complete. Plotting results...\n');
@@ -252,8 +250,6 @@ ylabel("$\dot{\theta}_u$", 'Interpreter', 'latex')
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
 
-
-% --- MODIFICATION 3: Plot ISE vs. K ---
 %% Plot ISE vs. K
 figure
 plot(K_values, ISE_values, 'o-', 'LineWidth', 2, 'MarkerSize', 8, 'Color', red_target)
@@ -271,8 +267,6 @@ title('ISE (Integral of Squared Error) vs. Gain $K$', 'Interpreter', 'latex')
 grid on
 set(gca, 'FontSize', 14)
 set(gca, 'GridLineWidth', 1.5)
-% --- END MODIFICATION 3 ---
-
 
 %% Functions
 function x_dot = dynamics(robot_linkage, t, x, u)
@@ -396,12 +390,16 @@ function u = nonlinear_noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
 
     %% Compute Nonlinear Gains
     % Potential Hessian (Gamma)
-    Gamma = potential_hessian(cf_obj.robot_linkage, q, zeros(cf_obj.n, 1), zeros(cf_obj.m, 1));
+    % Gamma = potential_hessian(cf_obj.robot_linkage, q, zeros(cf_obj.n, 1), zeros(cf_obj.m, 1));
+
+    % Linear (Constant Gamma) case
+    Gamma = potential_hessian(cf_obj.robot_linkage, q_des, zeros(cf_obj.n, 1), zeros(cf_obj.m, 1));
     Jh = cf_obj.jacobian(q);
     Gamma_theta = (inv(Jh)')*Gamma*inv(Jh);
 
     % Compute Damping in collocated variables
-    [~, ~, ~, D_theta] = cf_obj.transformSystem(q, zeros(cf_obj.n, 1));
+    % [~, ~, ~, D_theta] = cf_obj.transformSystem(q, q_dot);
+    [~, ~, ~, D_theta] = cf_obj.transformSystem(q_des, zeros(cf_obj.n, 1));
 
     % Kpu = - 2*Gamma_{a, u} to maximize the convexity
     Kpu = -2.0*Gamma_theta(1:cf_obj.m, (cf_obj.m+1):end)*options.K;
