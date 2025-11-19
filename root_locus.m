@@ -35,10 +35,8 @@ grey_mid = "#858583";
 T1.VLinks.color = hex2rgb(blue_sofft);
 % Camera Position
 T1.PlotParameters.CameraPosition = [-0.0316   -0.0001   -6.9004];
-
 % CC Segment
-% T1.CVRods{1}(2).Phi_odr = zeros(6, 1);
-
+T1.CVRods{1}(2).Phi_odr = zeros(6, 1);
 % Update Linkage
 T1 = T1.Update();
 % Damping Joint
@@ -76,7 +74,8 @@ cf = Collocated_Form(T1);
 
 %% Feasible Target
 regen_equilibria = false;
-equilibria_dir = fullfile("equilibria", "rsip");
+% equilibria_dir = fullfile("equilibria", "rsip");
+equilibria_dir = fullfile("equilibria", "rcc");
 equilibria_file = fullfile(equilibria_dir, "equilibria" + mat_ext);
 % Regen Equilibria
 if(regen_equilibria || ~exist(equilibria_file, 'file'))
@@ -124,16 +123,18 @@ Kda_base = 1.0*eye(cf.m);
 Kpu_base = 0.0*ones(cf.m, cf.p);
 Kdu_base = 0.0*ones(cf.m, cf.p);
 % Plotting parameters
-plot_marker_size = 10;
-plot_line_width = 2.0;
+plot_marker_size = 16;
+plot_line_width = 3.0;
+font_size = 20;
+grid_linewidth = 2.5;
 ol_color = "#de425b"; % Open-loop color from your script
 
 %% 1. Varying Kpa
 % Define the range of gains for Kpa
 gain_values_kpa = 1.0:0.1:10; % <-- CHANGE THIS RANGE
 num_gains = length(gain_values_kpa);
-colors = turbo(num_gains);
-
+% colors = parula(num_gains);
+colors = SoFFTColormap(num_gains);
 figure;
 hold on
 grid on
@@ -161,20 +162,26 @@ title('Root Locus: Varying $K_{pa}$', 'Interpreter', 'latex')
 xlabel("Real Part", 'Interpreter', 'latex')
 ylabel("Imaginary Part", 'Interpreter', 'latex')
 set(gca, 'XScale', 'log')
-set(gca, 'FontSize', 14)
-set(gca, 'GridLineWidth', 1.5)
+set(gca, 'FontSize', font_size)
+set(gca, 'GridLineWidth', grid_linewidth)
 ax = gca;
 ax.XAxisLocation = 'origin';
 ax.YAxisLocation = 'origin';
-% legend(legend_entries_kpa, 'Location', 'best') % Removed as requested
+
+% --- COLORBAR UPDATE ---
+colormap(colors); % Set the colormap to match the colors used
+c = colorbar;
+clim([min(gain_values_kpa) max(gain_values_kpa)]); % Scale colorbar to gain range
+c.Label.String = '$K_{pa}$ Magnitude';
+c.Label.Interpreter = 'latex';
+c.Label.FontSize = font_size;
 hold off
 
 %% 2. Varying Kda
 % Define the range of gains for Kda
 gain_values_kda = 1.0:0.1:10.0; % <-- CHANGE THIS RANGE
 num_gains = length(gain_values_kda);
-colors = turbo(num_gains);
-
+colors = SoFFTColormap(num_gains);
 figure;
 hold on
 grid on
@@ -201,21 +208,27 @@ end
 title('Root Locus: Varying $K_{da}$', 'Interpreter', 'latex')
 xlabel("Real Part", 'Interpreter', 'latex')
 ylabel("Imaginary Part", 'Interpreter', 'latex')
-set(gca, 'FontSize', 14)
-set(gca, 'GridLineWidth', 1.5)
+set(gca, 'FontSize', font_size)
+set(gca, 'GridLineWidth', grid_linewidth)
 set(gca, 'XScale', 'log')
 ax = gca;
 ax.XAxisLocation = 'origin';
 ax.YAxisLocation = 'origin';
-% legend(legend_entries_kda, 'Location', 'best') % Removed as requested
+
+% --- COLORBAR UPDATE ---
+colormap(colors);
+c = colorbar;
+clim([min(gain_values_kda) max(gain_values_kda)]); % Scale colorbar
+c.Label.String = '$K_{da}$ Magnitude';
+c.Label.Interpreter = 'latex';
+c.Label.FontSize = font_size;
 hold off
 
 %% 3. Varying Kpu
 % Define the range of gains for Kpu
-gain_values_kpu = 0.0:0.01:2.0; % <-- CHANGE THIS RANGE
+gain_values_kpu = -5.0:0.1:0.0; % <-- CHANGE THIS RANGE
 num_gains = length(gain_values_kpu);
-colors = turbo(num_gains);
-
+colors = SoFFTColormap(num_gains);
 figure;
 hold on
 grid on
@@ -242,21 +255,27 @@ end
 title('Root Locus: Varying $K_{pu}$', 'Interpreter', 'latex')
 xlabel("Real Part", 'Interpreter', 'latex')
 ylabel("Imaginary Part", 'Interpreter', 'latex')
-set(gca, 'FontSize', 14)
-set(gca, 'GridLineWidth', 1.5)
+set(gca, 'FontSize', font_size)
+set(gca, 'GridLineWidth', grid_linewidth)
 set(gca, 'XScale', 'log')
 ax = gca;
 ax.XAxisLocation = 'origin';
 ax.YAxisLocation = 'origin';
-% legend(legend_entries_kpu, 'Location', 'best') % Removed as requested
+
+% --- COLORBAR UPDATE ---
+colormap(colors);
+c = colorbar;
+clim([min(gain_values_kpu) max(gain_values_kpu)]); % Scale colorbar
+c.Label.String = '$K_{pu}$ Magnitude';
+c.Label.Interpreter = 'latex';
+c.Label.FontSize = font_size;
 hold off
 
 %% 4. Varying Kdu
 % Define the range of gains for Kdu
-gain_values_kdu = 0.0:0.01:2.0; % <-- CHANGE THIS RANGE
+gain_values_kdu = 0.0:0.01:0.35; % <-- CHANGE THIS RANGE
 num_gains = length(gain_values_kdu);
-colors = turbo(num_gains);
-
+colors = SoFFTColormap(num_gains);
 figure;
 hold on
 grid on
@@ -283,15 +302,38 @@ end
 title('Root Locus: Varying $K_{du}$', 'Interpreter', 'latex')
 xlabel("Real Part", 'Interpreter', 'latex')
 ylabel("Imaginary Part", 'Interpreter', 'latex')
-set(gca, 'FontSize', 14)
-set(gca, 'GridLineWidth', 1.5)
+set(gca, 'FontSize', font_size)
+set(gca, 'GridLineWidth', grid_linewidth)
 set(gca, 'XScale', 'log')
 ax = gca;
 ax.XAxisLocation = 'origin';
 ax.YAxisLocation = 'origin';
-% legend(legend_entries_kdu, 'Location', 'best') % Removed as requested
+
+% --- COLORBAR UPDATE ---
+colormap(colors);
+c = colorbar;
+clim([min(gain_values_kdu) max(gain_values_kdu)]); % Scale colorbar
+c.Label.String = '$K_{du}$ Magnitude';
+c.Label.Interpreter = 'latex';
+c.Label.FontSize = font_size;
 hold off
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% END OF MODIFIED SECTION                                             %%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ColorMap
+function map = SoFFTColormap(n)
+    % 1. Load the fixed 256x3 data
+    baseMap = load("SoFFTColormap.mat");    
+    m = size(baseMap.SoFFTColormap, 1);
+    
+    % 2. Handle input arguments (Mimic parula's behavior)
+    if nargin < 1
+        f = get(groot, 'CurrentFigure');
+        if isempty(f)
+            n = m; % Default to 256 if no figure exists
+        else
+            n = size(f.Colormap, 1); % Default to current figure's colormap length
+        end
+    end
+    
+    % 3. Interpolate from 256 down (or up) to n
+    map = interp1(1:m, baseMap.SoFFTColormap, linspace(1, m, n), 'linear');
+end

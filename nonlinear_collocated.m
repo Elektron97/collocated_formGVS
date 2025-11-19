@@ -66,7 +66,7 @@ n = T1.ndof;
 % Repeatable rng
 seed = 4;
 rng(seed);
-q0 = 1.0e+0*randn(n, 1);
+q0 = 1.0e-1*randn(n, 1);
 qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
 
@@ -106,8 +106,9 @@ Kda = eye(cf.m);
 
 %% Simulate for multiple K values
 % Define K values to test
-% K_values = linspace(0, 50, 8);
-K_values = 0:0.5:50;
+% K_values = linspace(0, 50, 3);
+% K_values = 0:1:50;
+K_values = [0, 1, 15, 50];
 N_sims = length(K_values);
 
 % Get control law
@@ -153,7 +154,7 @@ for k = 1:N_sims
         z_sim_k(:, i) = cf.groupTransform(x_sim_k_transposed(:, i));
     end
     z_sim_all{k} = z_sim_k;
-    
+
     % Get time and state for this simulation
     t_sim_k = t_sim_all{k};         % [N_sim_steps x 1]
     z_sim_k = z_sim_all{k};         % [2*n x N_sim_steps]
@@ -175,11 +176,9 @@ end
 fprintf('Simulations complete. Plotting results...\n');
 
 %% Visualization
-% Load Custom Colormap
-load("SoFFTColormap.mat")
 
 % Get colormap
-colors = turbo(N_sims);
+colors = SoFFTColormap(N_sims);
 line_width = 2.0;
 line_style = "-";
 
@@ -410,4 +409,24 @@ function u = nonlinear_noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
     u_nc = Kpu*theta_tilde_u - Kdu*theta_dot(cf_obj.m + 1:end);
     % Compose the Actions
     u = u_c + u_nc;
+end
+
+%% ColorMap
+function map = SoFFTColormap(n)
+    % 1. Load the fixed 256x3 data
+    baseMap = load("SoFFTColormap.mat");    
+    m = size(baseMap.SoFFTColormap, 1);
+    
+    % 2. Handle input arguments (Mimic parula's behavior)
+    if nargin < 1
+        f = get(groot, 'CurrentFigure');
+        if isempty(f)
+            n = m; % Default to 256 if no figure exists
+        else
+            n = size(f.Colormap, 1); % Default to current figure's colormap length
+        end
+    end
+    
+    % 3. Interpolate from 256 down (or up) to n
+    map = interp1(1:m, baseMap.SoFFTColormap, linspace(1, m, n), 'linear');
 end

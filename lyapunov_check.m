@@ -20,6 +20,7 @@ file_name = "robot_linkage";
 mat_ext = ".mat";
 % Load Robot and Data
 load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
+addpath("functions")
 
 %% Update Robot
 % Camera Position
@@ -100,33 +101,39 @@ q_des = equilibria(:, 1);
 q_dot_des = zeros(cf.n, 1);
 
 %% Gains
-Kpa = 1;
-Kpu = 2;
+Kpa = 2.0e-2;
+Kpu = 5.0e-2; % 5.0e-2
 
 %% Plot Lyapunov
-% We will visualize V by sweeping q(1) and q(2), while holding all
-% other q_i and ALL q_dot at their desired equilibrium values.
+% Graphical Parameters
+fontsize = 20;
+grid_linewidth = 3;
+
+% Colormap
+load("SoFFTColormap.mat")
+
 % Check if the robot has at least 2 DOFs for this plot
 if n < 2
     fprintf('Robot has < 2 DOFs, skipping q1 vs q2 plot.\n');
-    % You might want to 'return' or just skip this section
 else
     fprintf('Setting up grid for q1 vs q2 plot...\n');
     
-    % 1. Define a reasonable range for q1 and q2
-    % (Centered around the equilibrium q_des)
-    % You may need to adjust the '0.5' to a range that suits your robot
-    q1_range = linspace(q_des(1) -2*pi, q_des(1) + 2*pi, 100); % 100 points
-    q2_range = linspace(q_des(2) - 10, q_des(2) + 10, 100); % 100 points
+    % --- MODIFIED SECTION START ---
+    % Define the range strictly to +/- 1.5 around the equilibrium
+    range_val = 2*pi;
+    q1_range = linspace(q_des(1) - range_val, q_des(1) + range_val, 100); 
+    q2_range = linspace(q_des(2) - range_val, q_des(2) + range_val, 100); 
+    % --- MODIFIED SECTION END ---
     
     % 2. Create a 2D grid
     [Q1, Q2] = meshgrid(q1_range, q2_range);
     
-    % 3. Initialize empty matrices to store V and its quadratic part
+    % 3. Initialize empty matrices
     V_grid = zeros(size(Q1));
-    V_quad_grid = zeros(size(Q1)); % <-- ADDED
+    V_quad_grid = zeros(size(Q1)); 
+    V_hessian_grid = zeros(size(Q1)); 
     
-    % 4. Define the fixed values (all velocities are zero)
+    % 4. Define the fixed values
     q_dot_fixed = q_dot_des; 
     
     % --- Computation ---
@@ -135,98 +142,133 @@ else
     fprintf('Calculating V values (this may take a moment)...\n');
     for i = 1:n_rows
         for j = 1:n_cols
-            % Start with the equilibrium q vector
+            % Construct q vector
             q_val = q_des; 
-            
-            % Overwrite the first two elements with grid values
             q_val(1) = Q1(i, j);
             q_val(2) = Q2(i, j);
             
-            % q_dot_val is held constant at q_dot_des (zeros)
-            
-            % Call your non-vectorizable function
-            % <-- MODIFIED to get two outputs
-            [V_grid(i, j), V_quad_grid(i, j)] = lyapunov(cf, q_val, q_dot_fixed, q_des, q_dot_des, Kpa, Kpu);
+            % Call function
+            [V_grid(i, j), V_quad_grid(i, j), V_hessian_grid(i, j)] = ...
+                lyapunov(cf, q_val, q_dot_fixed, q_des, q_dot_des, Kpa, Kpu);
         end
     end
     fprintf('Calculation complete.\n');
     
-    % --- Visualization 1: 3D Surface (Total V) ---
+    % --- Visualization 1: Comparison (Full V vs Hessian) ---
     figure;
-    surf(Q1, Q2, V_grid);
-    xlabel('Position (q_1)');
-    ylabel('Position (q_2)');
-    zlabel('Lyapunov Function Value (V)');
-    title('Lyapunov Function Slice (VelocITIES = 0)');
-    colorbar;
-    shading interp;
     hold on;
-    % Mark the equilibrium
-    [V_min, ~] = lyapunov(cf, q_des, q_dot_des, q_des, q_dot_des, Kpa, Kpu);
-    plot3(q_des(1), q_des(2), V_min, 'r*', 'MarkerSize', 10, 'LineWidth', 2);
-    legend('Full Lyapunov V', 'Equilibrium Point');
-    hold off;
     
+    % Plot 1: The Full Nonlinear Lyapunov Function (Surface)
+    s1 = surf(Q1, Q2, V_grid);
+    % s1.FaceAlpha = 0.8;        % Slightly transparent
+    s1.EdgeColor = 'none';     % No lines for the smooth surface
+    s1.DisplayName = 'Full Lyapunov V';
+    shading interp;
+    colormap(SoFFTColormap)
+    colorbar;
+    
+    % % Plot 2: The Hessian Approximation (Mesh/Wireframe)
+    % s2 = mesh(Q1, Q2, V_hessian_grid);
+    % s2.FaceColor = 'none';     % See-through
+    % % s2.EdgeColor = 'k';        % Black wireframe lines
+    % s2.EdgeAlpha = 0.5;
+    % s2.DisplayName = 'Hessian Approximation';
+
+    % Mark the equilibrium
+    [V_min, ~, ~] = lyapunov(cf, q_des, q_dot_des, q_des, q_dot_des, Kpa, Kpu);
+    plot3(q_des(1), q_des(2), V_min, 'r*', 'MarkerSize', 15, 'LineWidth', 3, ...
+        'DisplayName', 'Equilibrium');
+    
+    % Styling
+    xlabel('$q_1$', 'Interpreter', 'latex');
+    ylabel('$q_2$', 'Interpreter', 'latex');
+    zlabel('Energy Value');
+    title(['Comparison: Nonlinear V vs Hessian (Range \pm' num2str(range_val) ')']);
+    legend('show', 'Location', 'best');
+    view(3); 
+    grid on;
+    set(gca, 'FontSize', fontsize);
+    set(gca, 'GridLineWidth', grid_linewidth);
+    hold off;
+
     % --- Visualization 2: 2D Contour Plot (Total V) ---
     figure;
     contourf(Q1, Q2, V_grid, 20);
-    xlabel('Position (q_1)');
-    ylabel('Position (q_2)');
-    title('Lyapunov Level Sets (Velocities = 0)');
+    xlabel('$q_1$', 'Interpreter', 'latex');
+    ylabel('$q_2$', 'Interpreter', 'latex');
+    title('Lyapunov Level Sets');
+    colormap(SoFFTColormap)
     colorbar;
     axis equal;
     grid on;
     hold on;
-    % Mark the equilibrium
-    plot(q_des(1), q_des(2), 'r+', 'MarkerSize', 12, 'LineWidth', 2);
+    plot(q_des(1), q_des(2), 'r+', 'MarkerSize', 16, 'LineWidth', 3);
     legend('Level Sets', 'Equilibrium Point');
     hold off;
+    set(gca, 'FontSize', fontsize)
+    set(gca, 'GridLineWidth', grid_linewidth)
     
     % --- Visualization 3: 3D Surface (Quadratic Term ONLY) ---
-    % <-- NEW PLOT ADDED
     figure;
     surf(Q1, Q2, V_quad_grid);
-    xlabel('Position (q_1)');
-    ylabel('Position (q_2)');
-    zlabel('Lyapunov Value (V_{quad})');
-    title('Quadratic Term (0.5*\theta^T*Kp*\theta) Only');
+    xlabel('$q_1$', 'Interpreter', 'latex');
+    ylabel('$q_2$', 'Interpreter', 'latex');
+    zlabel('Control Quadratic Term');
+    colormap(SoFFTColormap)
     colorbar;
     shading interp;
     hold on;
-    % Mark the equilibrium
-    [~, V_quad_min] = lyapunov(cf, q_des, q_dot_des, q_des, q_dot_des, Kpa, Kpu);
-    plot3(q_des(1), q_des(2), V_quad_min, 'r*', 'MarkerSize', 10, 'LineWidth', 2);
-    legend('Quadratic Term', 'Equilibrium Point');
+    [~, V_quad_min, ~] = lyapunov(cf, q_des, q_dot_des, q_des, q_dot_des, Kpa, Kpu);
+    plot3(q_des(1), q_des(2), V_quad_min, 'r*', 'MarkerSize', 15, 'LineWidth', 3);
+    legend('Control Quadratic Term', 'Equilibrium Point');
     hold off;
-
+    set(gca, 'FontSize', fontsize)
+    set(gca, 'GridLineWidth', grid_linewidth)
 end
 
 %% Lyapunov Function Definition
-% <-- MODIFIED to return two values
-function [V_total, V_quad] = lyapunov(cf_obj, q, q_dot, q_des, q_dot_des, Kpa, Kpu)
+function [V_total, V_quad, V_hessian] = lyapunov(cf_obj, q, q_dot, q_des, q_dot_des, Kpa, Kpu)
     % Potential Energy at the equilbrium
     [~, Uel_des, Ug_des] = cf_obj.mechanicalEnergy(q_des, q_dot_des);
+    
     % Mechanical Energy at q, qdot
     [T, Uel, Ug] = cf_obj.mechanicalEnergy(q, q_dot);
+    
     % Correction term
     [~, G_theta, K_theta, ~] = cf_obj.transformSystem(q_des, q_dot_des);
     [theta, ~] = cf_obj.transform(q, q_dot);
+    
     % Desired Equilibrium in theta
     [theta_des, ~] = cf_obj.transform(q_des, q_dot_des);
+    
     % Error in collocated variable
     theta_tilde = theta_des - theta;
     theta_tilde_a = theta_tilde(1:cf_obj.m);
+    
     % Gain
     Kp = [Kpa, Kpu; zeros(cf_obj.p, cf_obj.n)];
-
+    
     % --- Break down the V terms ---
     % 1. Mechanical Energy part
     V_energy = T + Uel + Ug - Uel_des - Ug_des;
     % 2. Correction part
     V_correction = (theta_tilde_a')*(G_theta(1:cf_obj.m) + K_theta(1:cf_obj.m));
-    % 3. Quadratic part (the one you want to see separately)
+    % 3. Quadratic part
     V_quad = 0.5*(theta_tilde')*Kp*theta_tilde;
     
     % Compute total Lyapunov Function
     V_total = V_energy + V_correction + V_quad;
+    
+    % --- Potential Hessian --- %
+    % Note: Ensure potential_hessian is available in your path or defined
+    Gamma = potential_hessian(cf_obj.robot_linkage, q_des, zeros(cf_obj.n, 1), zeros(cf_obj.m, 1));
+    Jh = cf_obj.jacobian(q);
+    
+    % Check for singularity or inversion issues if needed
+    % Gamma_theta = (inv(Jh)')*Gamma*inv(Jh); 
+    % Better numerical stability than inv(Jh):
+    Gamma_theta = (Jh') \ (Gamma / Jh); 
+    
+    % Quadratic Form for Hessian approximation
+    V_hessian = 0.5*(theta_tilde')*(Gamma_theta + Kp)*theta_tilde;
 end
