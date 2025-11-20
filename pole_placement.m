@@ -14,6 +14,7 @@ cd(current_path)
 
 %% Load Data
 robot_name = "rsip";
+% robot_name = "rsip_extreme";
 % robot_name = "conical_hsupport";
 % mat ext
 file_name = "robot_linkage";
@@ -22,37 +23,39 @@ mat_ext = ".mat";
 load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 
 %% Update Robot
-% Camera Position
-T1.PlotParameters.Light = false;
-T1.PlotParameters.ClosePrevious = false;
-% Axes Limits
-T1.PlotParameters.XLim = [-T1.VLinks.L, T1.VLinks.L];
-T1.PlotParameters.YLim = [-T1.VLinks.L, T1.VLinks.L];
+% % Camera Position
+% T1.PlotParameters.Light = false;
+% T1.PlotParameters.ClosePrevious = false;
+% % Axes Limits
+% T1.PlotParameters.XLim = [-T1.VLinks.L, T1.VLinks.L];
+% T1.PlotParameters.YLim = [-T1.VLinks.L, T1.VLinks.L];
+
 % Colors
 blue_sofft = "#086788";
 red_target = "#f06543";
 grey_mid = "#858583";
-T1.VLinks.color = hex2rgb(blue_sofft);
-% Camera Position
-T1.PlotParameters.CameraPosition = [-0.0316   -0.0001   -6.9004];
-% Update Linkage
-T1 = T1.Update();
-% Damping Joint
-if T1.CVRods{1}(1).dof == 1
-    T1.D(1, 1) = 1e-2;
-else
-    VLinks = T1.VLinks;
-    VLinks.Eta = 0.8*VLinks.Eta;
-    T1.VLinks = VLinks;
-    for i = 1:length(T1.CVRods)
-        for j = 1:length(T1.CVRods{i})
-            T1.CVRods{1}(1).UpdateAll();
-            T1.CVRods{1}(2).UpdateAll();
-        end
-    end
-    % Update Linkage
-    T1 = T1.Update();
-end
+
+% T1.VLinks.color = hex2rgb(blue_sofft);
+% % Camera Position
+% T1.PlotParameters.CameraPosition = [-0.0316   -0.0001   -6.9004];
+% % Update Linkage
+% T1 = T1.Update();
+% % Damping Joint
+% if T1.CVRods{1}(1).dof == 1
+%     T1.D(1, 1) = 1e-2;
+% else
+%     VLinks = T1.VLinks;
+%     VLinks.Eta = 0.8*VLinks.Eta;
+%     T1.VLinks = VLinks;
+%     for i = 1:length(T1.CVRods)
+%         for j = 1:length(T1.CVRods{i})
+%             T1.CVRods{1}(1).UpdateAll();
+%             T1.CVRods{1}(2).UpdateAll();
+%         end
+%     end
+%     % Update Linkage
+%     T1 = T1.Update();
+% end
 
 %% Simulation Setup
 fs = 1e+3;
@@ -64,7 +67,7 @@ n = T1.ndof;
 % Repeatable rng
 seed = 4;
 rng(seed);
-q0 = 1.0e-6*randn(n, 1);
+q0 = 1.0e+0*randn(n, 1);
 qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
 % Collocation Object
@@ -144,10 +147,29 @@ set(gca, 'FontSize', font_size)
 set(gca, 'GridLineWidth', grid_linewidth)
 
 %% Check on Controllability
-rag = ctrb(A_theta, B_theta);
+% rag = ctrb(A_theta, B_theta);
+% 
+% % Assert on Controllability
+% assert(rank(rag) == 2*cf.n, "The linearized system is not controllable.")
+% disp("Condition Number of the Controllability Matrix")
+% disp(cond(rag))
+
+%%% Since the problem is ill-conditioned, is better to check the HBP test.
+%%%
+for i = 1:length(lambda_ol)
+    % Compute HBP test for the open-loop eigenvalues
+    pbh = [A_theta - lambda_ol(i)*eye(2*cf.n), B_theta];
+    
+    % Check the rank
+    if(rank(pbh) == 2*cf.n)
+        continue;
+    else
+        disp("System is not controllable. The eigenvalue " + num2str(lamdba_ol(i)) + " is not controllable.");
+    end
+end
 
 %% Pole Placement or LQR
-linear_control = "pole_placement"; % "pole_placement", "lqr"
+linear_control = "lqr"; % "pole_placement", "lqr"
 lambda_cl = lambda_ol;
 switch(linear_control)
     case "pole_placement"
@@ -164,7 +186,7 @@ switch(linear_control)
         
     case "lqr"
         %% Apply LQR
-        Q = blkdiag(1e+1*eye(cf.m), 0e+0*eye(cf.p), 1e+0*eye(cf.m), 0e+0*eye(cf.p));
+        Q = blkdiag(1e+3*eye(cf.m), 1e+0*eye(cf.p), 1e+3*eye(cf.m), 1e+0*eye(cf.p));
         R = 1e+0*eye(cf.m);
 
         % Q = blkdiag(0e+0*eye(cf.m), 1e+0*eye(cf.p), 0e+0*eye(cf.m), 0e+0*eye(cf.p));
@@ -291,6 +313,9 @@ xlabel("$t$ [s]", 'Interpreter', 'latex')
 ylabel("$\dot{\theta}_u$", 'Interpreter', 'latex')
 set(gca, 'FontSize', font_size)
 set(gca, 'GridLineWidth', grid_linewidth)
+
+%% Video
+% T1.plotqt(t_sim, x_sim', "record", false)
 
 %% Functions
 function x_dot = dynamics(robot_linkage, t, x, u)
