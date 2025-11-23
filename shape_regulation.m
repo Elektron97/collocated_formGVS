@@ -18,33 +18,34 @@ end
 robot_name = "rsip";
 % robot_name = "rsip_extreme";
 % robot_name = "conical_hsupport";
-
 file_name = "robot_linkage";
 mat_ext = ".mat";
-
 % Load Robot and Data
 load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 
 %% Add DoFs & External Forces
-% Modify DoFs and Modes
-CVRods = T1.CVRods;
-CVRods{1}(2).Phi_dof = [0, 0, 1, 1, 1, 0]';
-CVRods{1}(2).Phi_odr = 2.*CVRods{1}(2).Phi_dof;
-T1.CVRods = CVRods;
+% % Modify DoFs and Modes
+% CVRods = T1.CVRods;
+% CVRods{1}(2).Phi_dof = [0, 0, 1, 1, 1, 0]';
+% CVRods{1}(2).Phi_odr = 2.*CVRods{1}(2).Phi_dof;
+% T1.CVRods = CVRods;
+% 
+% % External Forces
+% addpath("functions")
+% T1.CEF = true;
+% 
+% T1 = T1.Update();
 
-% External Forces
-addpath("functions")
-T1.CEF = true;
-
-T1 = T1.Update();
+% Joint Damping
 T1.D(1, 1) = 0.5;
 
 %% Colors
-blue_sofft  = "#086788";   % Non-Collocated (Full)
-red_target  = "#f06543";
-grey_mid    = "#858583";
-red_ol      = "#de425b";     % Open Loop
-green_col   = "#2ca02c";    % Collocated Only
+blue_sofft   = "#086788";   % Non-Collocated (Full)
+red_target   = "#f06543";
+grey_mid     = "#89B6A5";
+red_ol       = "#de425b";   % Open Loop (kept for Eigenvalues plot only)
+green_col    = "#00a066";   % Collocated Only
+yellow_nokpu = "#ffa600";   % Non-Collocated (Kpu = 0)
 
 %% Simulation Setup
 fs = 1e+3;
@@ -53,22 +54,21 @@ t0 = 0;
 t = 0:(1/fs):tf;
 N_time = length(t);
 n = T1.ndof;
-
 % Repeatable rng
 seed = 4;
 rng(seed);
 q0 = 0.0e+0*randn(n, 1);
 qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
-
 % Collocation Object
 cf = Collocated_Form(T1);
 
 %% Feasible Target
-regen_equilibria = true;
+% Select Equilibria for input    
+u = 0.0.*ones(T1.nact, 1);
+regen_equilibria = false;
 equilibria_dir = fullfile("equilibria", robot_name);
-equilibria_file = fullfile(equilibria_dir, "equilibria" + mat_ext);
-
+equilibria_file = fullfile(equilibria_dir, "equilibria" + "_" + num2str(u) + mat_ext);
 % Regen Equilibria
 if(regen_equilibria || ~exist(equilibria_file, 'file'))
     % Load EquilibriaGVS repo
@@ -76,7 +76,6 @@ if(regen_equilibria || ~exist(equilibria_file, 'file'))
     addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS", "functions"))
     
     % Call equilibriaGVS function
-    u = 0.0.*ones(T1.nact, 1);
     equilibria = equilibriaGVS(T1, "input", u);
     % Filter Equilibria
     equilibria = filterEquilibria(equilibria, "angle_mask", [true, false, false]);
@@ -84,15 +83,22 @@ if(regen_equilibria || ~exist(equilibria_file, 'file'))
     if(~exist(equilibria_dir, 'dir'))
         mkdir(equilibria_dir);
     end
-    save(equilibria_file, "equilibria");
+    % save(equilibria_file, "equilibria");
 else
     load(equilibria_file);
 end
 
-% % Stable Equilibrium
-% q_des = equilibria(:, 1);
-% Unstable Equilibrium
-q_des = equilibria(:, 2);
+% true: stable equilibrium | false: unstable equilibrium
+is_stable = false;
+
+if is_stable
+    % Stable Equilibrium
+    q_des = equilibria(:, 1);
+else
+    % Unstable Equilibrium
+    q_des = equilibria(:, 2);
+end
+% Zero velocity
 q_dot_des = zeros(cf.n, 1);
 
 %% Linearized System
@@ -102,18 +108,16 @@ addpath(fullfile("..", "GVS-OptimalControl", "EquilibriaGVS", "functions"))
 %% Change Coordinates of the linearized system
 Jh = cf.jacobian(q_des);
 T = blkdiag(Jh, Jh);
-
 % Change of Basis in the Linearized System
 A_theta = inv(T)*A_lin*T;
 B_theta = inv(T)*B_lin;
 
 %% Show Open-Loop EigenValues
 lambda_ol = eig(A_theta);
-marker_size = 20;
-font_size = 20;
-grid_linewidth = 2.5;
-text_size = 18;
-
+marker_size = 22;
+font_size = 28;
+grid_linewidth = 3.0;
+text_size = 20;
 fig = figure;
 % Open Loop Plot
 plot(real(lambda_ol), imag(lambda_ol), 'x', 'MarkerSize', marker_size, 'LineWidth', 3.0, "Color", red_ol)
@@ -135,7 +139,11 @@ hold off
 grid on
 xlabel("Real ($\log$ scale)", 'Interpreter', 'latex')
 ylabel("Im", 'Interpreter', 'latex')
-% set(gca, 'XScale', 'log')
+
+if is_stable
+    set(gca, 'XScale', 'log')
+end
+
 set(gca, 'FontSize', font_size)
 set(gca, 'GridLineWidth', grid_linewidth)
 
@@ -152,38 +160,30 @@ for i = 1:length(lambda_ol)
     end
 end
 
-%% Pole Placement or LQR
-linear_control = "lqr"; % "pole_placement", "lqr"
-lambda_cl = lambda_ol;
+%% Apply LQR
+% % Gold (for now)
+% Q = blkdiag(1e+3*eye(cf.m), 1e+0*eye(cf.p), 1e+3*eye(cf.m), 1e+0*eye(cf.p));
+% R = 1e+0*eye(cf.m);
 
-switch(linear_control)
-    case "pole_placement"
-        poles = [-1, -2, -3, -4, -5, -6];
-        [K_pp, precision] = place(A_theta, B_theta, poles);
-        % Extract Gains
-        Kpa = K_pp(1:cf.m);
-        Kpu = K_pp(cf.m + 1:cf.n);
-        Kda = K_pp(cf.n + 1: cf.n + cf.m);
-        Kdu = K_pp(cf.n + cf.m + 1:end);
-        % Compute Closed-Loop Eigenvalues
-        lambda_cl = eig(A_theta - B_theta*K_pp);
-        
-    case "lqr"
-        %% Apply LQR
-        Q = blkdiag(1e+3*eye(cf.m), 1e+0*eye(cf.p), 1e+3*eye(cf.m), 1e+0*eye(cf.p));
-        R = 1e+0*eye(cf.m);
-        
-        % Solve Riccati
-        [K_lqr, P, lambda_cl] = lqr(A_theta, B_theta, Q, R);
-        
-        % Extract Gains
-        Kpa = K_lqr(1:cf.m);
-        Kpu = K_lqr(cf.m + 1:cf.n);
-        Kda = K_lqr(cf.n + 1: cf.n + cf.m);
-        Kdu = K_lqr(cf.n + cf.m + 1:end);
-    otherwise
-        error("Linear Controller not supported.")
-end
+% Brayson Rule
+qa = (1/2)^2;
+qu = (1/3)^2;
+qad = (1/2)^2;
+qud = (1/10)^2;
+r = 1e-3; % 1e-3
+
+% Build Weight Matrices
+Q = blkdiag(qa*eye(cf.m), qu*eye(cf.p), qad*eye(cf.m), qud*eye(cf.p));
+R = r*eye(cf.m);
+
+% Solve Riccati
+[K_lqr, P, lambda_cl] = lqr(A_theta, B_theta, Q, R);
+
+% Extract Gains
+Kpa = K_lqr(1:cf.m);
+Kpu = K_lqr(cf.m + 1:cf.n);
+Kda = K_lqr(cf.n + 1: cf.n + cf.m);
+Kdu = K_lqr(cf.n + cf.m + 1:end);
 
 % Plot Closed-Loop Eigenvalues
 figure(fig)
@@ -205,12 +205,8 @@ hold off
 legend("Open-Loop", "Closed-Loop")
 
 %% Simulate
-% 1. Simulate Open Loop (Zero Gains)
-ODEFUN_OL = @(t, xk) closed_loop(cf, t, xk, "control_law", "autonomous");
-[t_sim_ol, x_sim_ol] = ode15s(ODEFUN_OL, t, x0);
-x_sim_ol = x_sim_ol';
-
-% 2. Simulate Non-Collocated (Full Gains: Kpa, Kda, Kpu, Kdu)
+% ---------------------------------------------------------
+% 1. Simulate Non-Collocated (Full Gains: Kpa, Kda, Kpu, Kdu)
 control_law = "noncollocated_PD_FF";
 ODEFUN_FULL = @(t, xk) closed_loop(cf, t, xk, "q_des", q_des, ...
                                 "control_law", control_law, ...
@@ -219,97 +215,131 @@ ODEFUN_FULL = @(t, xk) closed_loop(cf, t, xk, "q_des", q_des, ...
 [t_sim, x_sim] = ode15s(ODEFUN_FULL, t, x0);
 x_sim = x_sim';
 
-% 3. Simulate Collocated Only (Partial Gains: Kpa, Kda only)
+% ---------------------------------------------------------
+% 2. Simulate Collocated Only (Partial Gains: Kpa, Kda only)
 control_law_col = "collocated_PD_FF";
 ODEFUN_COL = @(t, xk) closed_loop(cf, t, xk, "q_des", q_des, ...
                                 "control_law", control_law_col, ...
-                                "Kpa", Kpa, "Kda", Kda); % Kpu and Kdu are ignored by this law
+                                "Kpa", Kpa, "Kda", Kda);
 [t_sim_col, x_sim_col] = ode15s(ODEFUN_COL, t, x0);
 x_sim_col = x_sim_col';
 
+% ---------------------------------------------------------
+% 3. Simulate Non-Collocated with Kpu = 0
+control_law_nokpu = "damping_injection";
+ODEFUN_NO_KPU = @(t, xk) closed_loop(cf, t, xk, "q_des", q_des, ...
+                                "control_law", control_law_nokpu, ...
+                                "Kpa", Kpa, "Kda", Kda); 
+[t_sim_nokpu, x_sim_nokpu] = ode15s(ODEFUN_NO_KPU, t, x0);
+x_sim_nokpu = x_sim_nokpu';
+
 %% Visualization
-% --- Process Non-Collocated Data ---
+% --- Process Non-Collocated Data (Full) ---
 N_sim = length(t_sim);
 z_sim = zeros(2*cf.n, N_sim);
 for i = 1:N_sim
     z_sim(:, i) = cf.groupTransform(x_sim(:, i));
 end
-
-% --- Process Open Loop Data ---
-N_sim_ol = length(t_sim_ol);
-z_sim_ol = zeros(2*cf.n, N_sim_ol);
-for i = 1:N_sim_ol
-    z_sim_ol(:, i) = cf.groupTransform(x_sim_ol(:, i));
-end
-
 % --- Process Collocated Only Data ---
 N_sim_col = length(t_sim_col);
 z_sim_col = zeros(2*cf.n, N_sim_col);
 for i = 1:N_sim_col
     z_sim_col(:, i) = cf.groupTransform(x_sim_col(:, i));
 end
+% --- Process Non-Collocated (No Kpu) Data ---
+N_sim_nokpu = length(t_sim_nokpu);
+z_sim_nokpu = zeros(2*cf.n, N_sim_nokpu);
+for i = 1:N_sim_nokpu
+    z_sim_nokpu(:, i) = cf.groupTransform(x_sim_nokpu(:, i));
+end
 
 % ------------------------------
-line_width = 3.0; 
+line_width = 4.0; 
 line_style = "-";
-
 % Show simulations
 figure
+tiledlayout(2, 2, 'TileSpacing','Compact', 'Padding', 'Compact')
+
 % 1. Theta Actuated
-subplot(4, 1, 1)
+% subplot(2, 2, 1)
+nexttile
 hold on
-plot(t_sim_ol, z_sim_ol(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', red_ol)
 plot(t_sim, z_sim(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', blue_sofft)
 plot(t_sim_col, z_sim_col(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', '--', 'Color', green_col)
+% plot(t_sim_nokpu, z_sim_nokpu(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
 hold off
 grid on
+xlim([t_sim(1), t_sim(end)])
 xlabel("$t$ [s]", 'Interpreter', 'latex')
 ylabel("$\theta_a$", 'Interpreter', 'latex')
 set(gca, 'FontSize', font_size)
 set(gca, 'GridLineWidth', grid_linewidth)
-legend("Open-Loop", "Non-Collocated (Full)", "Collocated Only", 'Location', 'best')
+% legend("Non-Collocated", "Collocated Only", "Damping Injection", 'Interpreter', 'latex', 'Location', 'northeast')
+% legend("Non-Collocated PD+FF", "Collocated PD+FF", 'Interpreter', 'latex', 'Location', 'northeast')
 
 % 2. Theta Unactuated
-subplot(4, 1, 2)
+% subplot(2, 2, 2)
+nexttile
 hold on
-plot(t_sim_ol, z_sim_ol(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', red_ol)
 plot(t_sim, z_sim(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', blue_sofft)
 plot(t_sim_col, z_sim_col(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', '--', 'Color', green_col)
+% plot(t_sim_nokpu, z_sim_nokpu(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
 hold off
 grid on
+xlim([t_sim(1), t_sim(end)])
 xlabel("$t$ [s]", 'Interpreter', 'latex')
 ylabel("$\theta_u$", 'Interpreter', 'latex')
 set(gca, 'FontSize', font_size)
 set(gca, 'GridLineWidth', grid_linewidth)
+% legend("Non-Collocated PD+FF", "Collocated PD+FF", 'Interpreter', 'latex', 'Location', 'northeast')
 
 % 3. Theta Dot Actuated
-subplot(4, 1, 3)
+% subplot(2, 2, 3)
+nexttile
 hold on
-plot(t_sim_ol, z_sim_ol(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', red_ol)
 plot(t_sim, z_sim(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', blue_sofft)
 plot(t_sim_col, z_sim_col(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', '--', 'Color', green_col)
+% plot(t_sim_nokpu, z_sim_nokpu(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
 hold off
 grid on
+xlim([t_sim(1), t_sim(end)])
 xlabel("$t$ [s]", 'Interpreter', 'latex')
 ylabel("$\dot{\theta}_a$", 'Interpreter', 'latex')
 set(gca, 'FontSize', font_size)
 set(gca, 'GridLineWidth', grid_linewidth)
+% legend("Non-Collocated PD+FF", "Collocated PD+FF", 'Interpreter', 'latex', 'Location', 'northeast')
 
 % 4. Theta Dot Unactuated
-subplot(4, 1, 4)
+% subplot(2, 2, 4)
+nexttile
 hold on
-plot(t_sim_ol, z_sim_ol(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', red_ol)
 plot(t_sim, z_sim(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', blue_sofft)
 plot(t_sim_col, z_sim_col(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', '--', 'Color', green_col)
+% plot(t_sim_nokpu, z_sim_nokpu(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
 hold off
 grid on
+xlim([t_sim(1), t_sim(end)])
 xlabel("$t$ [s]", 'Interpreter', 'latex')
 ylabel("$\dot{\theta}_u$", 'Interpreter', 'latex')
 set(gca, 'FontSize', font_size)
 set(gca, 'GridLineWidth', grid_linewidth)
+% legend("Non-Collocated PD+FF", "Collocated PD+FF", 'Interpreter', 'latex', 'Location', 'northeast')
+
+%% Save Figure
+figure_path = fullfile("figures", robot_name);
+save_figure = true;
+
+if save_figure
+    file_name = "swingup_simulation";
+    % savefig(fullfile(figure_path, file_name + ".fig"));
+
+    % Rendering SVG
+    set(gcf,'renderer','painters');
+    saveas(gcf, fullfile(figure_path, file_name + ".svg"));
+end
 
 %% Video
-% T1.plotqt(t_sim, x_sim', "record", true, "video_name", "rsip_swingup_dist")
+% T1.plotqt(t_sim, x_sim', "record", true, "video_name", "rsip_swingup")
 
 %% Functions
 function x_dot = dynamics(robot_linkage, t, x, u)
@@ -319,7 +349,6 @@ function x_dot = dynamics(robot_linkage, t, x, u)
     % dxdt = [q_dot; q_2dot]
     x_dot = [x(robot_linkage.ndof + 1:end); y(1:robot_linkage.ndof)];
 end
-
 function x_dot = closed_loop(cf, t, x, options)
     arguments
         cf; 
@@ -340,9 +369,13 @@ function x_dot = closed_loop(cf, t, x, options)
     switch options.control_law
         case "autonomous"
             u = zeros(cf.m, 1);
+
         case "collocated_PD_FF"
-            % This function only uses Kpa and Kda inside
             [u, ~, ~, ~] = collocated_PD_FF(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), "Kpa", options.Kpa, "Kda", options.Kda);
+
+        case "damping_injection"
+            u = damping_injection(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), "Kpa", options.Kpa, "Kda", options.Kda);
+
         case "noncollocated_PD_FF"
             u = noncollocated_PD_FF(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), ...
                                         "Kpa", options.Kpa, "Kda", options.Kda, ...
@@ -392,6 +425,36 @@ function [u, theta_des, theta, theta_dot] = collocated_PD_FF(cf_obj, q_des, q, q
     
     % Compute Control Law
     u = options.Kpa*theta_tilde_a - options.Kda*(theta_dot_a) + Ga + Ka;
+end
+
+%% Non-collocated Law
+function u = damping_injection(cf_obj, q_des, q, q_dot, options)
+    arguments
+        % Collocation Form object: useful for conversion
+        cf_obj
+        % Desired state (in joint space, not in the collocated variables)
+        q_des
+        % Feedback terms
+        q
+        q_dot
+        % Gains
+        options.Kpa = eye(cf_obj.m);
+        options.Kda = eye(cf_obj.m);
+    end
+    
+    % Collocated Term
+    [u_c, ~, ~, theta_dot] = collocated_PD_FF(cf_obj, q_des, q, q_dot, "Kpa", options.Kpa, "Kda", options.Kda);
+    
+    % Compute (optimal) Damping Injection
+    [~, ~, ~, D_theta] = cf_obj.transformSystem(q_des, zeros(cf_obj.n, 1));
+    Kdu = -2.0*D_theta(1:cf_obj.m, (cf_obj.m+1):end);
+
+
+    % Kdu = -2 Dau
+    u_nc = - Kdu*theta_dot(cf_obj.m + 1:end);
+    
+    % Compose the Actions
+    u = u_c + u_nc;
 end
 
 %% Non-collocated Law
