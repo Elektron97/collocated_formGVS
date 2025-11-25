@@ -34,9 +34,8 @@ load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 % % External Forces
 % addpath("functions")
 % T1.CEF = true;
-% 
 % T1 = T1.Update();
-% 
+
 % % Modify Young Modulus
 % VLinks = T1.VLinks;
 % VLinks.E = 1.0e-1*VLinks.E;
@@ -54,6 +53,13 @@ grey_mid     = "#353B45";
 red_ol       = "#de425b";   % Open Loop (kept for Eigenvalues plot only)
 green_col    = "#00a066";   % Collocated Only
 yellow_nokpu = "#ffa600";   % Non-Collocated (Kpu = 0)
+
+% Create Figure Path
+figure_path = fullfile("figures", robot_name);
+% Create if not exists
+if(~exist(figure_path, 'dir'))
+    mkdir(figure_path);
+end
 
 %% Simulation Setup
 fs = 1e+3;
@@ -363,11 +369,10 @@ end
 figure
 plot(t_sim, u_sim, 'LineWidth', line_width, 'Color', blue_sofft)
 grid on
-xlabel("$t$ [s]")
-ylabel("$u$ [N $\cdot$ m]")
+xlabel("$t$ [s]", 'Interpreter', 'latex')
+ylabel("$u$ [N $\cdot$ m]", 'Interpreter', 'latex')
 
 %% Save Figure
-figure_path = fullfile("figures", robot_name);
 save_figure = false;
 
 if save_figure
@@ -494,10 +499,16 @@ end
 % end
 
 %% Video
-% T1.PlotParameters.ClosePrevious = true;
-% T1.VLinks.alpha = 1.0;
-% T1.VLinks.color = hex2rgb(blue_sofft);
-% T1.plotqt(t_sim, x_sim', "record", true, "video_name", robot_name)
+video_path = fullfile(figure_path, "videos");
+if(~exist(video_path, 'dir'))
+    mkdir(video_path);
+end
+
+% Record Video
+T1.PlotParameters.ClosePrevious = true;
+T1.VLinks.alpha = 1.0;
+T1.VLinks.color = hex2rgb(blue_sofft);
+% T1.plotqt(t_sim, x_sim', "record", false, "video_name", robot_name + "_dist", "video_path", video_path)
 
 %% Functions
 function x_dot = dynamics(robot_linkage, t, x, u)
@@ -518,8 +529,12 @@ function x_dot = closed_loop(cf, t, x, options)
         options.Kpu = zeros(cf.m, cf.p);
         options.Kdu = zeros(cf.m, cf.p);
         options.q_des = zeros(2*cf.n, 1);
+        options.covariance = zeros(2*cf.n, 2*cf.n);
     end
     
+    % Noise
+    noise = mvnrnd(zeros(2*cf.n, 1), options.covariance)';
+
     % Compute Control Action
     u = 0.0*ones(cf.m, 1);
     
@@ -529,15 +544,17 @@ function x_dot = closed_loop(cf, t, x, options)
             u = zeros(cf.m, 1);
 
         case "collocated_PD_FF"
-            [u, ~, ~, ~] = collocated_PD_FF(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), "Kpa", options.Kpa, "Kda", options.Kda);
+            [u, ~, ~, ~] = collocated_PD_FF(cf, options.q_des, x(1:cf.n) + noise(1:cf.n), x(cf.n + 1:end) + noise(cf.n + 1:end), ...
+                                                                                    "Kpa", options.Kpa, "Kda", options.Kda);
 
         case "damping_injection"
-            u = damping_injection(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), "Kpa", options.Kpa, "Kda", options.Kda);
+            u = damping_injection(cf, options.q_des, x(1:cf.n) + noise(1:cf.n), x(cf.n + 1:end) + noise(cf.n + 1:end), ...
+                                                                                "Kpa", options.Kpa, "Kda", options.Kda);
 
         case "noncollocated_PD_FF"
-            u = noncollocated_PD_FF(cf, options.q_des, x(1:cf.n), x(cf.n + 1:end), ...
-                                        "Kpa", options.Kpa, "Kda", options.Kda, ...
-                                        "Kpu", options.Kpu, "Kdu", options.Kdu);
+            u = noncollocated_PD_FF(cf, options.q_des, x(1:cf.n) + noise(1:cf.n), x(cf.n + 1:end) + noise(cf.n + 1:end), ...
+                                                                                "Kpa", options.Kpa, "Kda", options.Kda, ...
+                                                                                "Kpu", options.Kpu, "Kdu", options.Kdu);
         otherwise
             warning("Control Law not supported.")
     end

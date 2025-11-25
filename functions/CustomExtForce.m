@@ -29,8 +29,10 @@ dFext_dq = zeros(6*nsig,Linkage.ndof);
 if exist('t','var')
     t_disturb = 5;
     tol = 1e-1;
+    % scale = 50; % R-SIP
+    scale = 1;
 
     if(t >= (t_disturb - tol) && t <= (t_disturb + tol))
-        Fext(end-5:end) = 50.*[0; 0; -1; 0; -2; 0];
+        Fext(end-5:end) = scale.*[0; 0; -1; 0; -2; 0];
     end
 end
