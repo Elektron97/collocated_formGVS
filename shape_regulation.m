@@ -16,7 +16,6 @@ end
 
 %% Load Data
 % robot_name = "rsip";
-% robot_name = "rsip_extreme";
 % robot_name = "conical_hsupport";
 robot_name = "cable";
 file_name = "robot_linkage";
@@ -29,11 +28,14 @@ load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 CVRods = T1.CVRods;
 CVRods{1}(2).Phi_dof = [0, 0, 1, 1, 1, 0]';
 CVRods{1}(2).Phi_odr = 2.*CVRods{1}(2).Phi_dof;
+CVRods{1}(2).xi_starfn = @(X) [0, cos(pi/4), sin(pi/4) 1, 0, 0]';
 T1.CVRods = CVRods;
 
 % External Forces
 addpath("functions")
 T1.CEF = true;
+
+% Update
 T1 = T1.Update();
 
 % % Modify Young Modulus

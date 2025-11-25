@@ -14,10 +14,9 @@ startup
 cd(current_path)
 
 %% Useful Paths
+robot_name =  "free_cable";
 % robot_name =  "rsip";
-% robot_name =  "rsip_extreme";
-% robot_name =  "free_rod";
-robot_name = "conical_hsupport";
+% robot_name = "conical_hsupport";
 robot_dir = fullfile("robots", robot_name);
 
 % Create Directory
@@ -26,8 +25,8 @@ if ~exist(robot_dir, 'dir')
 end
 
 %% Flags
-rebuild_link = false;
-rebuild_linkage = false;
+rebuild_link = true;
+rebuild_linkage = true;
 
 % File Names
 mat_ext = ".mat";
@@ -60,7 +59,7 @@ end
 
 %% Improve Visualization
 % Camera Position
-T1.PlotParameters.Light = false;
+% T1.PlotParameters.Light = false;
 T1.PlotParameters.ClosePrevious = false;
 
 % Axes Limits
@@ -72,13 +71,13 @@ blue_sofft = "#086788";
 T1.VLinks.color = hex2rgb(blue_sofft);
 
 % Camera Position
-T1.PlotParameters.CameraPosition = [-0.0316   -0.0001   -6.9004];
+% T1.PlotParameters.CameraPosition = [-0.0316   -0.0001   -6.9004];
 
 % Update Linkage
 T1 = T1.Update();
 
 % Save Robot after modification
- save(fullfile(robot_dir, linkage_file + mat_ext), "T1");
+save(fullfile(robot_dir, linkage_file + mat_ext), "T1");
 
 %% Show Robot
 T1.plotq(0.2*randn(T1.ndof, 1))
