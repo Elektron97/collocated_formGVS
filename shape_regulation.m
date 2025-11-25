@@ -44,7 +44,9 @@ load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 % T1 = T1.Update();
 
 % Joint Damping
-T1.D(1, 1) = 0.5;
+if robot_name ~= "conical_hsupport"
+    T1.D(1, 1) = 0.5;
+end
 
 %% Colors
 blue_sofft   = "#086788";   % Non-Collocated (Full)
@@ -105,7 +107,7 @@ else
 end
 
 % true: stable equilibrium | false: unstable equilibrium
-is_stable = false;
+is_stable = true;
 
 if is_stable
     % Stable Equilibrium

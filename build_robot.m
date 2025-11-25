@@ -17,7 +17,7 @@ cd(current_path)
 % robot_name =  "rsip";
 % robot_name =  "rsip_extreme";
 % robot_name =  "free_rod";
-robot_name = "cable";
+robot_name = "conical_hsupport";
 robot_dir = fullfile("robots", robot_name);
 
 % Create Directory
