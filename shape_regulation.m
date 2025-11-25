@@ -25,16 +25,16 @@ mat_ext = ".mat";
 load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 
 %% Add DoFs & External Forces
-% % Modify DoFs and Modes
-% CVRods = T1.CVRods;
-% CVRods{1}(2).Phi_dof = [0, 0, 1, 1, 1, 0]';
-% CVRods{1}(2).Phi_odr = 2.*CVRods{1}(2).Phi_dof;
-% T1.CVRods = CVRods;
-% 
-% % External Forces
-% addpath("functions")
-% T1.CEF = true;
-% T1 = T1.Update();
+% Modify DoFs and Modes
+CVRods = T1.CVRods;
+CVRods{1}(2).Phi_dof = [0, 0, 1, 1, 1, 0]';
+CVRods{1}(2).Phi_odr = 2.*CVRods{1}(2).Phi_dof;
+T1.CVRods = CVRods;
+
+% External Forces
+addpath("functions")
+T1.CEF = true;
+T1 = T1.Update();
 
 % % Modify Young Modulus
 % VLinks = T1.VLinks;
@@ -107,7 +107,7 @@ else
 end
 
 % true: stable equilibrium | false: unstable equilibrium
-is_stable = true;
+is_stable = false;
 
 if is_stable
     % Stable Equilibrium
@@ -510,7 +510,7 @@ end
 T1.PlotParameters.ClosePrevious = true;
 T1.VLinks.alpha = 1.0;
 T1.VLinks.color = hex2rgb(blue_sofft);
-% T1.plotqt(t_sim, x_sim', "record", false, "video_name", robot_name + "_dist", "video_path", video_path)
+T1.plotqt(t_sim, x_sim', "record", true, "video_name", robot_name + "_dist", "video_path", video_path)
 
 %% Functions
 function x_dot = dynamics(robot_linkage, t, x, u)
