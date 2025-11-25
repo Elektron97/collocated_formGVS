@@ -15,8 +15,9 @@ cd(current_path)
 
 %% Useful Paths
 % robot_name =  "rsip";
-robot_name =  "rsip_extreme";
+% robot_name =  "rsip_extreme";
 % robot_name =  "free_rod";
+robot_name = "cable";
 robot_dir = fullfile("robots", robot_name);
 
 % Create Directory
@@ -25,8 +26,8 @@ if ~exist(robot_dir, 'dir')
 end
 
 %% Flags
-rebuild_link = true;
-rebuild_linkage = true;
+rebuild_link = false;
+rebuild_linkage = false;
 
 % File Names
 mat_ext = ".mat";
@@ -76,11 +77,8 @@ T1.PlotParameters.CameraPosition = [-0.0316   -0.0001   -6.9004];
 % Update Linkage
 T1 = T1.Update();
 
-% Damping JointT1.D
-T1.D(1, 1) = 0.5;
-
 % Save Robot after modification
  save(fullfile(robot_dir, linkage_file + mat_ext), "T1");
 
 %% Show Robot
-% T1.plotq(0.2*randn(T1.ndof, 1))
+T1.plotq(0.2*randn(T1.ndof, 1))

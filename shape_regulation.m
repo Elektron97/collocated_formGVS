@@ -15,9 +15,10 @@ if exist(diff_sorosim_path, 'dir')
 end
 
 %% Load Data
-robot_name = "rsip";
+% robot_name = "rsip";
 % robot_name = "rsip_extreme";
 % robot_name = "conical_hsupport";
+robot_name = "cable";
 file_name = "robot_linkage";
 mat_ext = ".mat";
 % Load Robot and Data
@@ -35,6 +36,13 @@ load(fullfile("robots", robot_name, "robot_linkage" + mat_ext));
 % T1.CEF = true;
 % 
 % T1 = T1.Update();
+% 
+% % Modify Young Modulus
+% VLinks = T1.VLinks;
+% VLinks.E = 1.0e-1*VLinks.E;
+% T1.VLinks = VLinks;
+% T1.CVRods{1}(2).UpdateMEG();
+% T1 = T1.Update();
 
 % Joint Damping
 T1.D(1, 1) = 0.5;
@@ -42,7 +50,7 @@ T1.D(1, 1) = 0.5;
 %% Colors
 blue_sofft   = "#086788";   % Non-Collocated (Full)
 red_target   = "#f06543";
-grey_mid     = "#89B6A5";
+grey_mid     = "#353B45";
 red_ol       = "#de425b";   % Open Loop (kept for Eigenvalues plot only)
 green_col    = "#00a066";   % Collocated Only
 yellow_nokpu = "#ffa600";   % Non-Collocated (Kpu = 0)
@@ -54,19 +62,21 @@ t0 = 0;
 t = 0:(1/fs):tf;
 N_time = length(t);
 n = T1.ndof;
+
 % Repeatable rng
 seed = 4;
 rng(seed);
 q0 = 0.0e+0*randn(n, 1);
 qdot0 = zeros(n, 1);
 x0 = [q0; qdot0];
+
 % Collocation Object
 cf = Collocated_Form(T1);
 
 %% Feasible Target
 % Select Equilibria for input    
 u = 0.0.*ones(T1.nact, 1);
-regen_equilibria = false;
+regen_equilibria = true;
 equilibria_dir = fullfile("equilibria", robot_name);
 equilibria_file = fullfile(equilibria_dir, "equilibria" + "_" + num2str(u) + mat_ext);
 % Regen Equilibria
@@ -161,9 +171,11 @@ for i = 1:length(lambda_ol)
 end
 
 %% Apply LQR
-% % Gold (for now)
-% Q = blkdiag(1e+3*eye(cf.m), 1e+0*eye(cf.p), 1e+3*eye(cf.m), 1e+0*eye(cf.p));
-% R = 1e+0*eye(cf.m);
+% qa = 1e+3;
+% qu =  1e+0;
+% qad = 1e+3;
+% qud = 1e+0;
+% r = 1e+0; % 1e-3
 
 % Brayson Rule
 qa = (1/2)^2;
@@ -234,6 +246,9 @@ ODEFUN_NO_KPU = @(t, xk) closed_loop(cf, t, xk, "q_des", q_des, ...
 x_sim_nokpu = x_sim_nokpu';
 
 %% Visualization
+% Collocated Desired variables
+z_des = cf.groupTransform([q_des; zeros(cf.n, 1)]);
+
 % --- Process Non-Collocated Data (Full) ---
 N_sim = length(t_sim);
 z_sim = zeros(2*cf.n, N_sim);
@@ -252,7 +267,6 @@ z_sim_nokpu = zeros(2*cf.n, N_sim_nokpu);
 for i = 1:N_sim_nokpu
     z_sim_nokpu(:, i) = cf.groupTransform(x_sim_nokpu(:, i));
 end
-
 % ------------------------------
 line_width = 4.0; 
 line_style = "-";
@@ -265,8 +279,11 @@ tiledlayout(2, 2, 'TileSpacing','Compact', 'Padding', 'Compact')
 nexttile
 hold on
 plot(t_sim, z_sim(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', blue_sofft)
-plot(t_sim_col, z_sim_col(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', '--', 'Color', green_col)
-% plot(t_sim_nokpu, z_sim_nokpu(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
+if ~T1.CEF
+    plot(t_sim_col, z_sim_col(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', green_col)
+    % plot(t_sim_nokpu, z_sim_nokpu(1:cf.m, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
+end
+yline(z_des(1:cf.m), 'LineWidth', 3.0, 'LineStyle', '--', 'Color', grey_mid)
 hold off
 grid on
 xlim([t_sim(1), t_sim(end)])
@@ -275,15 +292,18 @@ ylabel("$\theta_a$", 'Interpreter', 'latex')
 set(gca, 'FontSize', font_size)
 set(gca, 'GridLineWidth', grid_linewidth)
 % legend("Non-Collocated", "Collocated Only", "Damping Injection", 'Interpreter', 'latex', 'Location', 'northeast')
-% legend("Non-Collocated PD+FF", "Collocated PD+FF", 'Interpreter', 'latex', 'Location', 'northeast')
+% legend("Non-Collocated PD+FF", "Collocated PD+FF", "Target", 'Interpreter', 'latex', 'Location', 'best')
 
 % 2. Theta Unactuated
 % subplot(2, 2, 2)
 nexttile
 hold on
 plot(t_sim, z_sim(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', blue_sofft)
-plot(t_sim_col, z_sim_col(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', '--', 'Color', green_col)
-% plot(t_sim_nokpu, z_sim_nokpu(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
+if ~T1.CEF
+    plot(t_sim_col, z_sim_col(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', green_col)
+    % plot(t_sim_nokpu, z_sim_nokpu(cf.m + 1:cf.n, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
+end
+yline(z_des(cf.m + 1:cf.n), 'LineWidth', 3.0, 'LineStyle', '--', 'Color', grey_mid)
 hold off
 grid on
 xlim([t_sim(1), t_sim(end)])
@@ -298,8 +318,11 @@ set(gca, 'GridLineWidth', grid_linewidth)
 nexttile
 hold on
 plot(t_sim, z_sim(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', blue_sofft)
-plot(t_sim_col, z_sim_col(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', '--', 'Color', green_col)
-% plot(t_sim_nokpu, z_sim_nokpu(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
+if ~T1.CEF
+    plot(t_sim_col, z_sim_col(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', green_col)
+    % plot(t_sim_nokpu, z_sim_nokpu(cf.n + 1: cf.n + cf.m, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
+end
+yline(z_des(cf.n + 1: cf.n + cf.m), 'LineWidth', 3.0, 'LineStyle', '--', 'Color', grey_mid)
 hold off
 grid on
 xlim([t_sim(1), t_sim(end)])
@@ -314,8 +337,11 @@ set(gca, 'GridLineWidth', grid_linewidth)
 nexttile
 hold on
 plot(t_sim, z_sim(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', line_style, 'Color', blue_sofft)
-plot(t_sim_col, z_sim_col(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', '--', 'Color', green_col)
-% plot(t_sim_nokpu, z_sim_nokpu(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
+if ~T1.CEF
+    plot(t_sim_col, z_sim_col(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', green_col)
+    % plot(t_sim_nokpu, z_sim_nokpu(cf.n + cf.m + 1:end, :), 'LineWidth', line_width, 'LineStyle', '-.', 'Color', yellow_nokpu)
+end
+yline(z_des(cf.n + cf.m + 1), 'LineWidth', 3.0, 'LineStyle', '--', 'Color', grey_mid)
 hold off
 grid on
 xlim([t_sim(1), t_sim(end)])
@@ -325,12 +351,27 @@ set(gca, 'FontSize', font_size)
 set(gca, 'GridLineWidth', grid_linewidth)
 % legend("Non-Collocated PD+FF", "Collocated PD+FF", 'Interpreter', 'latex', 'Location', 'northeast')
 
+%% Reconstruct the Input (Debug)
+u_sim = zeros(cf.m, length(t_sim));
+
+for i = 1:length(t_sim)
+    u_sim(:, i) = noncollocated_PD_FF(cf, q_des, x_sim(1:cf.n, i), x_sim(cf.n + 1:end, i), ...
+                            "Kpa", Kpa, "Kda", Kda, ...
+                            "Kpu", Kpu, "Kdu", Kdu);
+end
+
+figure
+plot(t_sim, u_sim, 'LineWidth', line_width, 'Color', blue_sofft)
+grid on
+xlabel("$t$ [s]")
+ylabel("$u$ [N $\cdot$ m]")
+
 %% Save Figure
 figure_path = fullfile("figures", robot_name);
-save_figure = true;
+save_figure = false;
 
 if save_figure
-    file_name = "swingup_simulation";
+    file_name = "swingup_simulation_dist";
     % savefig(fullfile(figure_path, file_name + ".fig"));
 
     % Rendering SVG
@@ -338,8 +379,125 @@ if save_figure
     saveas(gcf, fullfile(figure_path, file_name + ".svg"));
 end
 
+%% Snapshots
+% % Mid Points
+% T1.PlotParameters.ClosePrevious = true;
+% T1.VLinks.alpha = 0.2;
+% % T1.VLinks.color = hex2rgb(grey_mid);
+% 
+% if ~T1.CEF
+%     frames = [1, 50, 100:280:1000, length(t_sim)];
+% else
+%     % frames = [4800:100:5000, 5000:100:5500, 6000];
+%     frames = 4800:250:6200;
+% end
+% % Colors
+% colors = SoFFTColormap(length(frames));
+% 
+% figure
+% plot(nan, nan)
+% hold on
+% for i = 2:length(frames)-1
+%     T1.VLinks.color = colors(i,:);
+%     T1.plotq(x_sim(1:T1.ndof, frames(i))');
+%     T1.PlotParameters.ClosePrevious = false;
+% end
+% hold off
+% set(gca, 'FontSize', 25)
+% 
+% if save_figure
+%     file_name = "swingup_frames_dist";
+%     % savefig(fullfile(figure_path, file_name + ".fig"));
+% 
+%     % Rendering SVG
+%     set(gcf,'renderer','painters');
+%     saveas(gcf, fullfile(figure_path, file_name + ".svg"));
+% end
+% 
+% figure
+% plot(nan)
+% hold on
+% T1.PlotParameters.ClosePrevious = true;
+% T1.VLinks.alpha = 1.0;
+% T1.VLinks.color = colors(2, :);
+% T1.plotq(x_sim(1:T1.ndof, frames(3))');
+% 
+% T1.PlotParameters.ClosePrevious = false;
+% % 
+% % T1.VLinks.color = colors(end, :);
+% % T1.plotq(x_sim(1:T1.ndof, frames(end))');
+% hold off
+% set(gca, 'FontSize', 25)
+% 
+% if save_figure
+%     file_name = "swingup_target_dist";
+%     % savefig(fullfile(figure_path, file_name + ".fig"));
+% 
+%     % Rendering SVG
+%     set(gcf,'renderer','painters');
+%     saveas(gcf, fullfile(figure_path, file_name + ".svg"));
+% end
+% 
+% if ~T1.CEF
+%     % Mid Points
+%     T1.PlotParameters.ClosePrevious = true;
+%     T1.VLinks.alpha = 0.2;
+%     % T1.VLinks.color = hex2rgb(grey_mid);
+% 
+%     frames = [1, 50, 100:280:1000, length(t_sim_col)];
+%     % Colors
+%     colors = SoFFTColormap(length(frames));
+% 
+%     figure
+%     plot(nan, nan)
+%     hold on
+%     for i = 2:length(frames)-1
+%         T1.VLinks.color = colors(i,:);
+%         T1.plotq(x_sim_col(1:T1.ndof, frames(i))');
+%         T1.PlotParameters.ClosePrevious = false;
+%     end
+%     hold off
+%     set(gca, 'FontSize', 25)
+% 
+%     if save_figure
+%         file_name = "swingup_frames_col";
+%         % savefig(fullfile(figure_path, file_name + ".fig"));
+% 
+%         % Rendering SVG
+%         set(gcf,'renderer','painters');
+%         saveas(gcf, fullfile(figure_path, file_name + ".svg"));
+%     end
+% 
+%     figure
+%     plot(nan)
+%     hold on
+%     T1.PlotParameters.ClosePrevious = true;
+%     T1.VLinks.alpha = 1.0;
+%     T1.VLinks.color = hex2rgb(blue_sofft);
+%     T1.plotq(x_sim_col(1:T1.ndof, 1)');
+% 
+%     T1.PlotParameters.ClosePrevious = false;
+% 
+%     T1.VLinks.color = hex2rgb(yellow_nokpu);
+%     T1.plotq(x_sim_col(1:T1.ndof, end)');
+%     hold off
+%     set(gca, 'FontSize', 25)
+% 
+%     if save_figure
+%         file_name = "swingup_target_col";
+%         % savefig(fullfile(figure_path, file_name + ".fig"));
+% 
+%         % Rendering SVG
+%         set(gcf,'renderer','painters');
+%         saveas(gcf, fullfile(figure_path, file_name + ".svg"));
+%     end
+% end
+
 %% Video
-% T1.plotqt(t_sim, x_sim', "record", true, "video_name", "rsip_swingup")
+% T1.PlotParameters.ClosePrevious = true;
+% T1.VLinks.alpha = 1.0;
+% T1.VLinks.color = hex2rgb(blue_sofft);
+% T1.plotqt(t_sim, x_sim', "record", true, "video_name", robot_name)
 
 %% Functions
 function x_dot = dynamics(robot_linkage, t, x, u)
@@ -421,7 +579,8 @@ function [u, theta_des, theta, theta_dot] = collocated_PD_FF(cf_obj, q_des, q, q
     
     %% Compute Control Law
     % WrapToPi
-    theta_tilde_a = wrapToPi(theta_des_a - theta_a);
+    % theta_tilde_a = wrapToPi(theta_des_a - theta_a);
+    theta_tilde_a = theta_des_a - theta_a;
     
     % Compute Control Law
     u = options.Kpa*theta_tilde_a - options.Kda*(theta_dot_a) + Ga + Ka;
@@ -470,8 +629,8 @@ function u = noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
         % Gains
         options.Kpa = eye(cf_obj.m);
         options.Kda = eye(cf_obj.m);
-        options.Kpu = eye(cf_obj.p);
-        options.Kdu = eye(cf_obj.p);
+        options.Kpu = zeros(cf_obj.m, cf_obj.p);
+        options.Kdu = zeros(cf_obj.m, cf_obj.p);
     end
     
     % Collocated Term
@@ -483,4 +642,24 @@ function u = noncollocated_PD_FF(cf_obj, q_des, q, q_dot, options)
     
     % Compose the Actions
     u = u_c + u_nc;
+end
+
+%% ColorMap
+function map = SoFFTColormap(n)
+    % 1. Load the fixed 256x3 data
+    baseMap = load("SoFFTColormap.mat");    
+    m = size(baseMap.SoFFTColormap, 1);
+    
+    % 2. Handle input arguments (Mimic parula's behavior)
+    if nargin < 1
+        f = get(groot, 'CurrentFigure');
+        if isempty(f)
+            n = m; % Default to 256 if no figure exists
+        else
+            n = size(f.Colormap, 1); % Default to current figure's colormap length
+        end
+    end
+    
+    % 3. Interpolate from 256 down (or up) to n
+    map = interp1(1:m, baseMap.SoFFTColormap, linspace(1, m, n), 'linear');
 end
